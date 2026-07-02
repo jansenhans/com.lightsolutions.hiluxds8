@@ -1,0 +1,52 @@
+{
+  "id": "com.lightsolutions.hiluxds8",
+  "version": "1.0.0",
+  "compatibility": ">=5.0.0",
+  "sdk": 3,
+  "platforms": ["local"],
+  "name": { "en": "HiluX DS8" },
+  "description": { "en": "Control your LightSolutions HiluX DS8 (Powered by Shelly) tunable white downlight." },
+  "brandColor": "#5E35B1",
+  "category": ["lights"],
+  "permissions": [],
+  "images": {
+    "small": "/assets/images/small.png",
+    "large": "/assets/images/large.png"
+  },
+  "author": {
+    "name": "Hans Jansen"
+  },
+  "drivers": [
+    {
+      "id": "hilux-ds8",
+      "name": { "en": "HiluX DS8" },
+      "class": "light",
+      "capabilities": ["onoff", "dim", "light_temperature"],
+      "platforms": ["local"],
+      "connectivity": ["lan"],
+      "images": {
+        "small": "/drivers/hilux-ds8/assets/images/small.png",
+        "large": "/drivers/hilux-ds8/assets/images/large.png"
+      },
+      "settings": [
+        {
+          "id": "address",
+          "type": "text",
+          "label": { "en": "IP Address" },
+          "value": ""
+        }
+      ],
+      "pair": [
+        {
+          "id": "list_devices",
+          "template": "list_devices",
+          "navigation": { "next": "add_devices" }
+        },
+        {
+          "id": "add_devices",
+          "template": "add_devices"
+        }
+      ]
+    }
+  ]
+}

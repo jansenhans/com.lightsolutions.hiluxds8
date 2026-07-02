@@ -1,0 +1,29 @@
+{
+  "app": {
+    "name": "HiluX DS8",
+    "description": "Control your LightSolutions HiluX DS8 (Powered by Shelly) tunable white downlight."
+  },
+  "driver": {
+    "hilux-ds8": {
+      "name": "HiluX DS8",
+      "pair": {
+        "list_devices": {
+          "title": "Searching for HiluX DS8 lights...",
+          "subtitle": "Make sure your lights are powered on and connected to your Wi-Fi network."
+        },
+        "no_devices": "No HiluX DS8 lights found on your network. Make sure they are powered on and connected to Wi-Fi."
+      },
+      "settings": {
+        "address": {
+          "label": "IP Address",
+          "hint": "The local IP address of the HiluX DS8. Set a static IP or DHCP reservation in your router to prevent it from changing."
+        }
+      }
+    }
+  },
+  "error": {
+    "not_found": "Could not reach the HiluX DS8 at the configured IP address.",
+    "invalid_device": "This does not appear to be a HiluX DS8 device.",
+    "timeout": "The device did not respond in time. Check that it is powered on and connected to your network."
+  }
+}
