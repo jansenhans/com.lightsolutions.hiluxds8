@@ -1,4 +1,7 @@
 {
+  "1.3.0": {
+    "en": "Start/stop dimming now use the native CCT.DimUp/DimDown/DimStop of firmware 2.0+, with automatic fallback for older firmware."
+  },
   "1.2.0": {
     "en": "Added hold-to-dim Flow cards: start dimming (alternating direction) and stop dimming."
   },

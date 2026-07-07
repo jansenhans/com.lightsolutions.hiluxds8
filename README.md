@@ -103,13 +103,19 @@ over the local network:
 Why a device-side script instead of Homey flows: the Shelly Homey app exposes
 no *button released* event, so true hold-to-dim/release-to-stop cannot be
 built with flows. The script sees `btn_up` the instant the button is released
-and freezes the fade by reading each light's live brightness and re-setting it
-without a transition. It also can't desync: every action reads the lights'
+and halts all lights with the native `CCT.DimStop` — they freeze at exactly
+the same brightness. It also can't desync: every action reads the lights'
 real state first (no shadow variables).
+
+**Requires light firmware >= 2.0.0** for `CCT.DimUp`/`DimDown`/`DimStop`.
+(The Homey app's *Start/Stop dimming* flow cards use the same native calls
+and fall back automatically to a timed fade + read-and-freeze on older
+firmware.) Note: Shelly firmware updates reset the light's default
+`transition_duration` to 3.0 s — re-apply your preferred value afterwards.
 
 **Install:** open the i4's web UI → Scripts → create a script, paste the file,
 enable *Run on startup*, and start it. Edit the `LIGHTS` array (the lights'
-IP addresses) and `FULL_RANGE_S` (seconds for a full 1–100% sweep) to taste.
-The input must be in *button* mode. Give the lights and the i4 fixed IP
-addresses (static or DHCP reservations) — the script addresses the lights
+IP addresses) and `DIM_RATE` (1 = slow, ~25 s full sweep; 5 = fast, ~5 s) to
+taste. The input must be in *button* mode. Give the lights and the i4 fixed
+IP addresses (static or DHCP reservations) — the script addresses the lights
 directly.

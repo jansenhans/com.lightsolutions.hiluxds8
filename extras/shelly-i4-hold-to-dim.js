@@ -2,18 +2,20 @@
 //   single push:  toggle all lights on/off (based on actual light state)
 //   double push:  dim to 20% (only when lights are on)
 //   triple push:  dim to 50% (only when lights are on)
-//   long push:    fade up/down (alternating); release freezes at current level
+//   long push:    dim up/down (alternating); release freezes at current level
+// Requires light firmware >= 2.0.0 (native CCT.DimUp/DimDown/DimStop).
 let LIGHTS = ["192.168.1.176", "192.168.1.194", "192.168.1.111", "192.168.1.179"];
-let FULL_RANGE_S = 5; // seconds for a full 1..100% dim sweep
-let dimUp = true;     // direction of the next long push
+let DIM_RATE = 5; // 1 (slow, ~25 s full range) .. 5 (fast, ~5 s full range)
+let dimUp = true; // direction of the next long push
 let fading = false;
 
-function setLight(ip, qs) {
-  Shelly.call("HTTP.GET", { url: "http://" + ip + "/rpc/CCT.Set?id=0&" + qs, timeout: 3 }, function () {});
-}
-
-function setAll(qs) {
-  for (let i = 0; i < LIGHTS.length; i++) setLight(LIGHTS[i], qs);
+function callAll(method, qs) {
+  for (let i = 0; i < LIGHTS.length; i++) {
+    Shelly.call("HTTP.GET", {
+      url: "http://" + LIGHTS[i] + "/rpc/" + method + "?id=0" + (qs ? "&" + qs : ""),
+      timeout: 3,
+    }, function () {});
+  }
 }
 
 // Read the first light's status as the reference for group decisions
@@ -25,28 +27,23 @@ function withStatus(cb) {
   });
 }
 
-function freeze(ip) {
-  Shelly.call("HTTP.GET", { url: "http://" + ip + "/rpc/CCT.GetStatus?id=0", timeout: 3 }, function (res) {
-    if (!res || res.code !== 200) return;
-    let st = JSON.parse(res.body);
-    if (typeof st.brightness === "number") {
-      setLight(ip, "brightness=" + JSON.stringify(Math.round(st.brightness)));
-    }
-  });
-}
-
 function toggle() {
   withStatus(function (st) {
     let on = st ? st.output === true : false;
-    setAll("on=" + JSON.stringify(!on) + "&transition_duration=0.5");
+    callAll("CCT.Set", "on=" + JSON.stringify(!on) + "&transition_duration=0.5");
   });
 }
 
 function dimTo(pct) {
   withStatus(function (st) {
     if (!st || st.output !== true) return; // only when lights are on
-    setAll("brightness=" + JSON.stringify(pct) + "&transition_duration=1");
+    callAll("CCT.Set", "brightness=" + JSON.stringify(pct) + "&transition_duration=1");
   });
+}
+
+function beginDim(up) {
+  fading = true;
+  callAll(up ? "CCT.DimUp" : "CCT.DimDown", "fade_rate=" + JSON.stringify(DIM_RATE));
 }
 
 function startDim() {
@@ -59,19 +56,31 @@ function startDim() {
     }
     if (!on || b <= 3) dimUp = true;
     else if (b >= 97) dimUp = false;
-    let target = dimUp ? 100 : 1;
+    let up = dimUp;
     dimUp = !dimUp; // alternate for the next long push
-    fading = true;
-    setAll("on=true&brightness=" + JSON.stringify(target) + "&transition_duration=" + JSON.stringify(FULL_RANGE_S));
+    if (on) {
+      beginDim(up);
+      return;
+    }
+    // Lights are off: turn on at 1% first, start dimming once they confirm —
+    // DimUp sent while a light is still switching on is ignored.
+    let pending = LIGHTS.length;
+    for (let i = 0; i < LIGHTS.length; i++) {
+      Shelly.call("HTTP.GET", {
+        url: "http://" + LIGHTS[i] + "/rpc/CCT.Set?id=0&on=true&brightness=1",
+        timeout: 3,
+      }, function () {
+        pending--;
+        if (pending === 0) beginDim(up);
+      });
+    }
   });
 }
 
 function stopDim() {
   if (!fading) return;
   fading = false;
-  for (let i = 0; i < LIGHTS.length; i++) {
-    freeze(LIGHTS[i]);
-  }
+  callAll("CCT.DimStop");
 }
 
 Shelly.addEventHandler(function (ev) {
