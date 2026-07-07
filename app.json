@@ -1,6 +1,6 @@
 {
   "id": "com.lightsolutions.hiluxds8",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "compatibility": ">=5.0.0",
   "sdk": 3,
   "platforms": ["local"],
@@ -73,6 +73,39 @@
             "max": 10800,
             "step": 1,
             "placeholder": { "en": "Duration (seconds)" }
+          }
+        ]
+      },
+      {
+        "id": "start_dimming",
+        "title": { "en": "Start dimming (hold-to-dim)" },
+        "titleFormatted": { "en": "Start dimming ([[duration]] s for the full range)" },
+        "hint": { "en": "Starts fading the brightness up or down, alternating direction each time like a classic dimmer. Combine with 'Stop dimming' on button release." },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=hilux-ds8"
+          },
+          {
+            "type": "number",
+            "name": "duration",
+            "min": 1,
+            "max": 60,
+            "step": 1,
+            "placeholder": { "en": "Seconds for full range (e.g. 5)" }
+          }
+        ]
+      },
+      {
+        "id": "stop_dimming",
+        "title": { "en": "Stop dimming" },
+        "hint": { "en": "Freezes the light at its current brightness, stopping any running fade." },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=hilux-ds8"
           }
         ]
       },

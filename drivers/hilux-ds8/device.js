@@ -124,6 +124,38 @@ class HiluxDS8Device extends Homey.Device {
     await this.fadeTo({ brightness, ct, seconds: minutes * 60 });
   }
 
+  // Hold-to-dim: start a fade toward full or minimum brightness, alternating
+  // direction each call like a classic dimmer. `seconds` is the time a fade
+  // across the full 1-100% range would take; shorter distances fade faster.
+  async startDimming({ seconds = 5 } = {}) {
+    const status = await this.client.getCctStatus(0);
+    const on = status.output === true;
+    const current = typeof status.brightness === 'number' ? Math.round(status.brightness) : 50;
+
+    let direction;
+    if (!on || current <= 2) direction = 'up';
+    else if (current >= 99) direction = 'down';
+    else direction = this._dimDirection === 'up' ? 'down' : 'up';
+    this._dimDirection = direction;
+
+    if (!on) await this._setCct({ on: true, brightness: 1 });
+
+    const from = on ? current : 1;
+    const target = direction === 'up' ? 100 : 1;
+    const duration = Math.max(1, seconds * (Math.abs(target - from) / 99));
+    await this.fadeTo({ brightness: target, seconds: duration });
+  }
+
+  // Freeze an ongoing fade at the light's current brightness.
+  async stopDimming() {
+    const status = await this.client.getCctStatus(0);
+    if (typeof status.brightness !== 'number') return;
+    const brightness = Math.round(status.brightness);
+    // Setting brightness without a transition halts the running fade
+    await this._setCct({ brightness });
+    await this.setCapabilityValue('dim', brightness / 100).catch(this.error);
+  }
+
   async onCapabilityOnoff(value) {
     // Update UI immediately (optimistic)
     await this.setCapabilityValue('onoff', value).catch(this.error);

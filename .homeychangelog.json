@@ -1,4 +1,7 @@
 {
+  "1.2.0": {
+    "en": "Added hold-to-dim Flow cards: start dimming (alternating direction) and stop dimming."
+  },
   "1.1.0": {
     "en": "Added Flow cards: fade to brightness, fade to colour temperature, and wake-up light with smooth transitions."
   },

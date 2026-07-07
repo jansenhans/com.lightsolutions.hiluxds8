@@ -56,6 +56,14 @@ class HiluxDS8Driver extends Homey.Driver {
         seconds: args.duration,
       }));
 
+    this.homey.flow.getActionCard('start_dimming')
+      .registerRunListener(async (args) => args.device.startDimming({
+        seconds: args.duration,
+      }));
+
+    this.homey.flow.getActionCard('stop_dimming')
+      .registerRunListener(async (args) => args.device.stopDimming());
+
     this.homey.flow.getActionCard('wake_up_light')
       .registerRunListener(async (args) => args.device.wakeUp({
         brightness: args.brightness,
