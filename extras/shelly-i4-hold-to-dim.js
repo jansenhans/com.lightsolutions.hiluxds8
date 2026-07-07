@@ -31,7 +31,9 @@ function withStatus(cb) {
 function toggle() {
   withStatus(function (st) {
     let on = st ? st.output === true : false;
-    callAll("CCT.Set", "on=" + JSON.stringify(!on) + "&transition_duration=0.5");
+    // Asymmetric fade: 1.5 s on (so the ramp is visible — the low end of a
+    // fade-in emits almost no light), 0.5 s off.
+    callAll("CCT.Set", "on=" + JSON.stringify(!on) + "&transition_duration=" + (on ? "0.5" : "1.5"));
   });
 }
 
