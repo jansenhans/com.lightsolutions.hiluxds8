@@ -69,4 +69,47 @@ lib/ShellyRpcClient.js            Local Shelly Gen3 RPC client
 drivers/hilux-ds8/driver.js       Pairing logic
 drivers/hilux-ds8/device.js       Capability listeners + polling
 drivers/hilux-ds8/pair/start.html Pairing screen (IP address entry)
+extras/shelly-i4-hold-to-dim.js   Shelly i4 Gen3 button script (see below)
 ```
+
+## Flow cards
+
+Since v1.1.0 the app provides custom Flow action cards, all backed by the
+Shelly firmware's native `transition_duration` so fades run on the light
+itself (smooth even if Homey is busy):
+
+- **Fade to a brightness** — fade to X% over 1 s – 3 h
+- **Fade to a colour temperature** — fade to X Kelvin over a duration
+- **Start dimming (hold-to-dim)** — fade toward full/minimum brightness,
+  alternating direction per call like a classic dimmer (v1.2.0)
+- **Stop dimming** — freeze the light at its current brightness (v1.2.0)
+- **Start wake-up light** — from 1% warm white to a target brightness and
+  colour temperature over up to 3 hours
+
+## Extra: Shelly i4 wall-button script (`extras/shelly-i4-hold-to-dim.js`)
+
+A companion mJS script that runs **on a Shelly i4 Gen3** (not on Homey) and
+gives one wall button full control of a group of HiluX DS8 lights, entirely
+over the local network:
+
+| Press        | Action                                                     |
+| ------------ | ---------------------------------------------------------- |
+| single push  | toggle all lights on/off (based on the actual light state) |
+| double push  | dim to 20% (only when on)                                  |
+| triple push  | dim to 50% (only when on)                                  |
+| long push    | fade brightness up/down, alternating direction each hold   |
+| release      | freeze at the current brightness                           |
+
+Why a device-side script instead of Homey flows: the Shelly Homey app exposes
+no *button released* event, so true hold-to-dim/release-to-stop cannot be
+built with flows. The script sees `btn_up` the instant the button is released
+and freezes the fade by reading each light's live brightness and re-setting it
+without a transition. It also can't desync: every action reads the lights'
+real state first (no shadow variables).
+
+**Install:** open the i4's web UI → Scripts → create a script, paste the file,
+enable *Run on startup*, and start it. Edit the `LIGHTS` array (the lights'
+IP addresses) and `FULL_RANGE_S` (seconds for a full 1–100% sweep) to taste.
+The input must be in *button* mode. Give the lights and the i4 fixed IP
+addresses (static or DHCP reservations) — the script addresses the lights
+directly.
