@@ -3,7 +3,7 @@
 const Homey = require('homey');
 const http = require('http');
 
-const SCAN_TIMEOUT_MS = 800;
+const SCAN_TIMEOUT_MS = 600;
 
 function probeIp(ip) {
   return new Promise((resolve) => {
@@ -28,15 +28,24 @@ function probeIp(ip) {
 }
 
 async function scanSubnet(baseIp) {
-  const parts = baseIp.split('.');
-  const subnet = `${parts[0]}.${parts[1]}.${parts[2]}`;
+  const parts = baseIp.split('.').map(Number);
 
-  // Scan all IPs at once — 254 parallel requests each with 800ms timeout
-  // Total time: ~1-2 seconds, well within Homey's 30s pairing timeout
-  const ips = Array.from({ length: 254 }, (_, i) => `${subnet}.${i + 1}`);
-  const results = await Promise.all(
-    ips.map(ip => probeIp(ip).then(info => ({ ip, info })))
-  );
+  // Scan the /23 that contains Homey's IP, not just its own /24 — this also
+  // finds lights when the LAN is widened to 255.255.254.0 and IoT devices
+  // are placed in the other /24 half (e.g. Homey in .1.x, lights in .0.x).
+  // On a plain /24 LAN the extra probes simply time out — harmless.
+  // One parallel wave per /24 half, Homey's own half first.
+  const third = parts[2] - (parts[2] % 2);
+  const halves = [parts[2], parts[2] === third ? third + 1 : third];
+
+  const results = [];
+  for (const octet3 of halves) {
+    const ips = Array.from({ length: 254 }, (_, i) => `${parts[0]}.${parts[1]}.${octet3}.${i + 1}`);
+    const settled = await Promise.all(
+      ips.map(ip => probeIp(ip).then(info => ({ ip, info })))
+    );
+    results.push(...settled);
+  }
   return results.filter(({ info }) => info !== null);
 }
 
