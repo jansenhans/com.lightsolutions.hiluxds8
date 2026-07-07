@@ -6,7 +6,7 @@
 // Requires light firmware >= 2.0.0 (native CCT.DimUp/DimDown/DimStop).
 let LIGHTS = ["192.168.1.176", "192.168.1.194", "192.168.1.111", "192.168.1.179"];
 let DIM_RATE = 5;   // 1 (slow, ~25 s full range) .. 5 (fast, ~5 s full range)
-let DIM_FLOOR = 10; // dim-down stops here, so the lights never fade to invisible
+let DIM_FLOOR = 5;  // dim-down stops here, so the lights never fade to invisible
 let dimUp = true;   // direction of the next long push
 let fading = false;
 
