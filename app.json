@@ -1,6 +1,6 @@
 {
   "id": "com.lightsolutions.hiluxds8",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "compatibility": ">=5.0.0",
   "sdk": 3,
   "platforms": ["local"],
@@ -15,6 +15,105 @@
   },
   "author": {
     "name": "Hans Jansen"
+  },
+  "flow": {
+    "actions": [
+      {
+        "id": "fade_to_brightness",
+        "title": { "en": "Fade to a brightness" },
+        "titleFormatted": { "en": "Fade to [[brightness]] % over [[duration]] seconds" },
+        "hint": { "en": "Smoothly change the brightness over a duration. The fade runs on the light itself." },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=hilux-ds8"
+          },
+          {
+            "type": "number",
+            "name": "brightness",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "placeholder": { "en": "Brightness (%)" }
+          },
+          {
+            "type": "number",
+            "name": "duration",
+            "min": 1,
+            "max": 10800,
+            "step": 1,
+            "placeholder": { "en": "Duration (seconds)" }
+          }
+        ]
+      },
+      {
+        "id": "fade_to_temperature",
+        "title": { "en": "Fade to a colour temperature" },
+        "titleFormatted": { "en": "Fade to [[temperature]] K over [[duration]] seconds" },
+        "hint": { "en": "Smoothly change the colour temperature (2200 K warm – 6000 K cool) over a duration." },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=hilux-ds8"
+          },
+          {
+            "type": "number",
+            "name": "temperature",
+            "min": 2200,
+            "max": 6000,
+            "step": 50,
+            "placeholder": { "en": "Temperature (K)" }
+          },
+          {
+            "type": "number",
+            "name": "duration",
+            "min": 1,
+            "max": 10800,
+            "step": 1,
+            "placeholder": { "en": "Duration (seconds)" }
+          }
+        ]
+      },
+      {
+        "id": "wake_up_light",
+        "title": { "en": "Start wake-up light" },
+        "titleFormatted": { "en": "Wake up to [[brightness]] % and [[temperature]] K over [[duration]] minutes" },
+        "hint": { "en": "Starts at 1% warm white and slowly brightens to the target brightness and colour temperature — a sunrise in your ceiling." },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=hilux-ds8"
+          },
+          {
+            "type": "number",
+            "name": "brightness",
+            "min": 1,
+            "max": 100,
+            "step": 1,
+            "placeholder": { "en": "Target brightness (%)" }
+          },
+          {
+            "type": "number",
+            "name": "temperature",
+            "min": 2200,
+            "max": 6000,
+            "step": 50,
+            "placeholder": { "en": "Target temperature (K)" }
+          },
+          {
+            "type": "number",
+            "name": "duration",
+            "min": 1,
+            "max": 180,
+            "step": 1,
+            "placeholder": { "en": "Duration (minutes)" }
+          }
+        ]
+      }
+    ]
   },
   "drivers": [
     {

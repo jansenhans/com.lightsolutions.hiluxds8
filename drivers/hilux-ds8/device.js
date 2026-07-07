@@ -105,6 +105,25 @@ class HiluxDS8Device extends Homey.Device {
     return this.client.setCct({ id: 0, ...params });
   }
 
+  // Fade to the given brightness (0-100 %) and/or colour temperature (Kelvin)
+  // over `seconds`. The transition runs on the Shelly firmware itself.
+  async fadeTo({ brightness, ct, seconds }) {
+    const params = {
+      on: true,
+      transitionDuration: Math.min(10800, Math.max(1, seconds)),
+    };
+    if (typeof brightness === 'number') params.brightness = Math.round(Math.min(100, Math.max(0, brightness)));
+    if (typeof ct === 'number') params.ct = Math.round(Math.min(CT_MAX, Math.max(CT_MIN, ct)));
+    await this._setCct(params);
+    await this.setCapabilityValue('onoff', true).catch(this.error);
+  }
+
+  // Wake-up light: jump to 1% warm white, then fade to the target over `minutes`.
+  async wakeUp({ brightness, ct, minutes }) {
+    await this._setCct({ on: true, brightness: 1, ct: CT_MIN });
+    await this.fadeTo({ brightness, ct, seconds: minutes * 60 });
+  }
+
   async onCapabilityOnoff(value) {
     // Update UI immediately (optimistic)
     await this.setCapabilityValue('onoff', value).catch(this.error);

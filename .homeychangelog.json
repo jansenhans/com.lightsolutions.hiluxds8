@@ -1,4 +1,7 @@
 {
+  "1.1.0": {
+    "en": "Added Flow cards: fade to brightness, fade to colour temperature, and wake-up light with smooth transitions."
+  },
   "1.0.1": {
     "en": "A first attemp to get it so work ..."
   },

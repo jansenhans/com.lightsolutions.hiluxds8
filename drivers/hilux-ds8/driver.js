@@ -43,6 +43,25 @@ async function scanSubnet(baseIp) {
 class HiluxDS8Driver extends Homey.Driver {
   async onInit() {
     this.log('HiluX DS8 driver initialized');
+
+    this.homey.flow.getActionCard('fade_to_brightness')
+      .registerRunListener(async (args) => args.device.fadeTo({
+        brightness: args.brightness,
+        seconds: args.duration,
+      }));
+
+    this.homey.flow.getActionCard('fade_to_temperature')
+      .registerRunListener(async (args) => args.device.fadeTo({
+        ct: args.temperature,
+        seconds: args.duration,
+      }));
+
+    this.homey.flow.getActionCard('wake_up_light')
+      .registerRunListener(async (args) => args.device.wakeUp({
+        brightness: args.brightness,
+        ct: args.temperature,
+        minutes: args.duration,
+      }));
   }
 
   async onPairListDevices() {
