@@ -31,9 +31,17 @@ function withStatus(cb) {
 function toggle() {
   withStatus(function (st) {
     let on = st ? st.output === true : false;
-    // Asymmetric fade: 1.5 s on (so the ramp is visible — the low end of a
-    // fade-in emits almost no light), 0.5 s off.
-    callAll("CCT.Set", "on=" + JSON.stringify(!on) + "&transition_duration=" + (on ? "0.5" : "1.5"));
+    if (on) {
+      callAll("CCT.Set", "on=false&transition_duration=0.5");
+      return;
+    }
+    // Turn on with one shared brightness (the reference light's remembered
+    // level) so all lights ramp identically — per-light remembered levels
+    // drift apart and make lights appear to respond at different speeds.
+    // 1.5 s fade-in so the ramp is visible (its low end emits almost no light).
+    let b = st && typeof st.brightness === "number" ? Math.round(st.brightness) : 50;
+    if (b < DIM_FLOOR) b = DIM_FLOOR;
+    callAll("CCT.Set", "on=true&brightness=" + JSON.stringify(b) + "&transition_duration=1.5");
   });
 }
 
