@@ -115,8 +115,9 @@ firmware.) Note: Shelly firmware updates reset the light's default
 
 **Install:** open the i4's web UI → Scripts → create a script, paste the file,
 enable *Run on startup*, and start it. Edit the `LIGHTS` array (the lights'
-IP addresses) and `DIM_RATE` (1 = slow, ~25 s full sweep; 5 = fast, ~5 s) to
-taste. The input must be in *button* mode. Give the lights and the i4 fixed
+IP addresses), `DIM_RATE` (1 = slow, ~25 s full sweep; 5 = fast, ~5 s) and
+`DIM_FLOOR` (dim-down stops at this %, so a held dim never fades the lights
+to invisible) to taste. The input must be in *button* mode. Give the lights and the i4 fixed
 IP addresses (static or DHCP reservations) — the script addresses the lights
 directly.
 

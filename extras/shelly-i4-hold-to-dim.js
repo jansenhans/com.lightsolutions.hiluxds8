@@ -5,8 +5,9 @@
 //   long push:    dim up/down (alternating); release freezes at current level
 // Requires light firmware >= 2.0.0 (native CCT.DimUp/DimDown/DimStop).
 let LIGHTS = ["192.168.1.176", "192.168.1.194", "192.168.1.111", "192.168.1.179"];
-let DIM_RATE = 5; // 1 (slow, ~25 s full range) .. 5 (fast, ~5 s full range)
-let dimUp = true; // direction of the next long push
+let DIM_RATE = 5;   // 1 (slow, ~25 s full range) .. 5 (fast, ~5 s full range)
+let DIM_FLOOR = 10; // dim-down stops here, so the lights never fade to invisible
+let dimUp = true;   // direction of the next long push
 let fading = false;
 
 function callAll(method, qs) {
@@ -41,9 +42,16 @@ function dimTo(pct) {
   });
 }
 
-function beginDim(up) {
+function beginDim(up, b) {
   fading = true;
-  callAll(up ? "CCT.DimUp" : "CCT.DimDown", "fade_rate=" + JSON.stringify(DIM_RATE));
+  if (up) {
+    callAll("CCT.DimUp", "fade_rate=" + JSON.stringify(DIM_RATE));
+    return;
+  }
+  // Down: timed fade to DIM_FLOOR at the same speed (~4%/s per rate unit),
+  // so the lights never dim below a visible level. DimStop freezes it.
+  let duration = Math.max(0.5, (b - DIM_FLOOR) / (DIM_RATE * 4));
+  callAll("CCT.Set", "brightness=" + JSON.stringify(DIM_FLOOR) + "&transition_duration=" + JSON.stringify(duration));
 }
 
 function startDim() {
@@ -54,12 +62,12 @@ function startDim() {
       if (typeof st.brightness === "number") b = st.brightness;
       on = st.output === true;
     }
-    if (!on || b <= 3) dimUp = true;
+    if (!on || b <= DIM_FLOOR + 2) dimUp = true;
     else if (b >= 97) dimUp = false;
     let up = dimUp;
     dimUp = !dimUp; // alternate for the next long push
     if (on) {
-      beginDim(up);
+      beginDim(up, b);
       return;
     }
     // Lights are off: turn on at 1% first, start dimming once they confirm —
@@ -71,7 +79,7 @@ function startDim() {
         timeout: 3,
       }, function () {
         pending--;
-        if (pending === 0) beginDim(up);
+        if (pending === 0) beginDim(up, 1);
       });
     }
   });
