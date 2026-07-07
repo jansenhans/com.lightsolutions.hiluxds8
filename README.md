@@ -119,3 +119,8 @@ IP addresses) and `DIM_RATE` (1 = slow, ~25 s full sweep; 5 = fast, ~5 s) to
 taste. The input must be in *button* mode. Give the lights and the i4 fixed
 IP addresses (static or DHCP reservations) — the script addresses the lights
 directly.
+
+**Recommended light setting:** set `min_brightness_on_toggle` to ~10 on each
+light (`CCT.SetConfig {"id":0,"config":{"min_brightness_on_toggle":10}}`).
+After dimming down to 1% — which is invisible — a plain toggle-on would
+otherwise restore that invisible 1% and the lights appear dead.
