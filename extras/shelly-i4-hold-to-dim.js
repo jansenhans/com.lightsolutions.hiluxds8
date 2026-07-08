@@ -4,28 +4,38 @@
 //   triple push:  dim to 50% (only when lights are on)
 //   long push:    dim up/down (alternating); release freezes at current level
 // Requires light firmware >= 2.0.0 (native CCT.DimUp/DimDown/DimStop).
-let LIGHTS = ["192.168.1.176", "192.168.1.194", "192.168.1.111", "192.168.1.179"];
+let LIGHTS = ["192.168.0.21", "192.168.0.22", "192.168.0.23", "192.168.0.24"];
 let DIM_RATE = 5;   // 1 (slow, ~25 s full range) .. 5 (fast, ~5 s full range)
 let DIM_FLOOR = 5;  // dim-down stops here, so the lights never fade to invisible
 let dimUp = true;   // direction of the next long push
 let fading = false;
 
+// Fire-and-forget RPC that can never crash the script: an unreachable light
+// keeps calls in flight until timeout, and stacked button presses can then
+// exceed the 5-concurrent-calls limit — Shelly.call throws synchronously.
+function safeCall(url, cb) {
+  try {
+    Shelly.call("HTTP.GET", { url: url, timeout: 2 }, cb || function () {});
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 function callAll(method, qs) {
   for (let i = 0; i < LIGHTS.length; i++) {
-    Shelly.call("HTTP.GET", {
-      url: "http://" + LIGHTS[i] + "/rpc/" + method + "?id=0" + (qs ? "&" + qs : ""),
-      timeout: 3,
-    }, function () {});
+    safeCall("http://" + LIGHTS[i] + "/rpc/" + method + "?id=0" + (qs ? "&" + qs : ""));
   }
 }
 
 // Read the first light's status as the reference for group decisions
 function withStatus(cb) {
-  Shelly.call("HTTP.GET", { url: "http://" + LIGHTS[0] + "/rpc/CCT.GetStatus?id=0", timeout: 3 }, function (res) {
+  let ok = safeCall("http://" + LIGHTS[0] + "/rpc/CCT.GetStatus?id=0", function (res) {
     let st = null;
     if (res && res.code === 200) st = JSON.parse(res.body);
     cb(st);
   });
+  if (!ok) cb(null);
 }
 
 function toggle() {
@@ -83,14 +93,12 @@ function startDim() {
     // Lights are off: turn on at 1% first, start dimming once they confirm —
     // DimUp sent while a light is still switching on is ignored.
     let pending = LIGHTS.length;
+    let done = function () {
+      pending--;
+      if (pending === 0) beginDim(up, 1);
+    };
     for (let i = 0; i < LIGHTS.length; i++) {
-      Shelly.call("HTTP.GET", {
-        url: "http://" + LIGHTS[i] + "/rpc/CCT.Set?id=0&on=true&brightness=1",
-        timeout: 3,
-      }, function () {
-        pending--;
-        if (pending === 0) beginDim(up, 1);
-      });
+      if (!safeCall("http://" + LIGHTS[i] + "/rpc/CCT.Set?id=0&on=true&brightness=1", done)) done();
     }
   });
 }
