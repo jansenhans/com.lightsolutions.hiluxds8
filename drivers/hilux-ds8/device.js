@@ -8,6 +8,11 @@ const CT_MAX = 6000;
 const POLL_INTERVAL_MS = 15000;
 const COMMAND_COOLDOWN_MS = 3000; // skip poll this long after a command
 const UNAVAILABLE_AFTER_FAILURES = 3;
+const ENFORCE_INTERVAL_MS = 60 * 60 * 1000; // re-check enforced settings hourly
+// Fallbacks when the device predates these settings (Homey doesn't backfill
+// manifest defaults into existing devices' settings stores)
+const DEFAULT_TRANSITION_S = 1;
+const DEFAULT_MIN_ON_TOGGLE = 5;
 
 function ctToHomeyTemperature(ct) {
   const clamped = Math.min(CT_MAX, Math.max(CT_MIN, ct));
@@ -42,6 +47,35 @@ class HiluxDS8Device extends Homey.Device {
 
     this.client = new ShellyRpcClient(this.address);
     await this._startPolling();
+
+    await this._enforceConfig().catch((err) => this.error('Config enforcement failed:', err));
+    this._enforceInterval = this.homey.setInterval(() => {
+      this._enforceConfig().catch((err) => this.error('Config enforcement failed:', err));
+    }, ENFORCE_INTERVAL_MS);
+  }
+
+  // Keep the light's on-device settings at their configured values. Firmware
+  // updates reset them (observed: transition_duration back to 3.0s), which
+  // makes one light visibly lag the rest of its group.
+  async _enforceConfig() {
+    if (!this.client) return;
+    const rawTransition = this.getSetting('default_transition');
+    const transition = typeof rawTransition === 'number' ? rawTransition : DEFAULT_TRANSITION_S;
+    const rawMin = this.getSetting('min_on_toggle');
+    const minOnToggle = typeof rawMin === 'number' ? rawMin : DEFAULT_MIN_ON_TOGGLE;
+
+    const cfg = await this.client.getCctConfig(0);
+    const patch = {};
+    if (cfg.transition_duration !== transition) {
+      patch.transition_duration = transition;
+    }
+    if (cfg.min_brightness_on_toggle !== minOnToggle) {
+      patch.min_brightness_on_toggle = minOnToggle;
+    }
+    if (Object.keys(patch).length > 0) {
+      await this.client.setCctConfig(0, patch);
+      this.log('Corrected drifted light settings:', JSON.stringify(patch));
+    }
   }
 
   async _startPolling() {
@@ -59,10 +93,12 @@ class HiluxDS8Device extends Homey.Device {
 
   async onUninit() {
     if (this._pollInterval) this.homey.clearInterval(this._pollInterval);
+    if (this._enforceInterval) this.homey.clearInterval(this._enforceInterval);
   }
 
   async onDeleted() {
     if (this._pollInterval) this.homey.clearInterval(this._pollInterval);
+    if (this._enforceInterval) this.homey.clearInterval(this._enforceInterval);
   }
 
   async onSettings({ newSettings, changedKeys }) {
@@ -75,6 +111,12 @@ class HiluxDS8Device extends Homey.Device {
       this.client = new ShellyRpcClient(this.address);
       this.log('Address updated to:', this.address);
       await this._startPolling();
+    }
+    if (changedKeys.includes('default_transition') || changedKeys.includes('min_on_toggle')) {
+      // Settings are persisted right after onSettings resolves — apply then
+      this.homey.setTimeout(() => {
+        this._enforceConfig().catch((err) => this.error('Config enforcement failed:', err));
+      }, 1000);
     }
   }
 
@@ -96,7 +138,12 @@ class HiluxDS8Device extends Homey.Device {
       await this.setCapabilityValue('dim', status.brightness / 100).catch(this.error);
     if (typeof status.ct === 'number')
       await this.setCapabilityValue('light_temperature', ctToHomeyTemperature(status.ct)).catch(this.error);
-    if (!this.getAvailable()) await this.setAvailable().catch(this.error);
+    if (!this.getAvailable()) {
+      await this.setAvailable().catch(this.error);
+      // Recovery from unavailable often means the light rebooted (e.g. a
+      // firmware update) — exactly when on-device settings get reset.
+      await this._enforceConfig().catch((err) => this.error('Config enforcement failed:', err));
+    }
   }
 
   async _setCct(params) {

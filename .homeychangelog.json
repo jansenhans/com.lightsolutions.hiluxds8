@@ -1,4 +1,7 @@
 {
+  "1.5.0": {
+    "en": "The app now enforces per-light settings (default fade time, minimum turn-on brightness) and repairs them automatically after firmware updates."
+  },
   "1.4.0": {
     "en": "Pairing now scans the full /23 around Homey's IP, finding lights on widened (255.255.254.0) networks."
   },
