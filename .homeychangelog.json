@@ -1,4 +1,7 @@
 {
+  "2.0.0": {
+    "en": "New: HiluX Wall Button driver for the Shelly i4 Gen3. Pair each button, place it in the zone it controls, and the app generates and deploys the i4 script automatically."
+  },
   "1.5.0": {
     "en": "The app now enforces per-light settings (default fade time, minimum turn-on brightness) and repairs them automatically after firmware updates."
   },

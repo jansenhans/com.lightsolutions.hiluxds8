@@ -48,6 +48,9 @@ class HiluxDS8Device extends Homey.Device {
     this.client = new ShellyRpcClient(this.address);
     await this._startPolling();
 
+    // A light appearing (or reappearing) can change a button cluster
+    if (this.homey.app.scheduleRebuild) this.homey.app.scheduleRebuild('light init');
+
     await this._enforceConfig().catch((err) => this.error('Config enforcement failed:', err));
     this._enforceInterval = this.homey.setInterval(() => {
       this._enforceConfig().catch((err) => this.error('Config enforcement failed:', err));
@@ -99,6 +102,7 @@ class HiluxDS8Device extends Homey.Device {
   async onDeleted() {
     if (this._pollInterval) this.homey.clearInterval(this._pollInterval);
     if (this._enforceInterval) this.homey.clearInterval(this._enforceInterval);
+    if (this.homey.app.scheduleRebuild) this.homey.app.scheduleRebuild('light deleted');
   }
 
   async onSettings({ newSettings, changedKeys }) {
@@ -111,6 +115,7 @@ class HiluxDS8Device extends Homey.Device {
       this.client = new ShellyRpcClient(this.address);
       this.log('Address updated to:', this.address);
       await this._startPolling();
+      if (this.homey.app.scheduleRebuild) this.homey.app.scheduleRebuild('light address changed');
     }
     if (changedKeys.includes('default_transition') || changedKeys.includes('min_on_toggle')) {
       // Settings are persisted right after onSettings resolves — apply then

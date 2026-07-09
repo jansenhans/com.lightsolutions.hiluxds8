@@ -1,6 +1,6 @@
 {
   "id": "com.lightsolutions.hiluxds8",
-  "version": "1.5.0",
+  "version": "2.0.0",
   "compatibility": ">=5.0.0",
   "sdk": 3,
   "platforms": ["local"],
@@ -8,7 +8,7 @@
   "description": { "en": "Control your LightSolutions HiluX DS8 (Powered by Shelly) tunable white downlight." },
   "brandColor": "#5E35B1",
   "category": ["lights"],
-  "permissions": [],
+  "permissions": ["homey:manager:api"],
   "images": {
     "small": "/assets/images/small.png",
     "large": "/assets/images/large.png"
@@ -193,6 +193,122 @@
               "max": 100,
               "step": 1,
               "units": { "en": "%" }
+            }
+          ]
+        }
+      ],
+      "pair": [
+        {
+          "id": "list_devices",
+          "template": "list_devices",
+          "navigation": { "next": "add_devices" }
+        },
+        {
+          "id": "add_devices",
+          "template": "add_devices"
+        }
+      ]
+    },
+    {
+      "id": "hilux-i4-button",
+      "name": { "en": "HiluX Wall Button (Shelly i4)" },
+      "class": "other",
+      "capabilities": [],
+      "platforms": ["local"],
+      "connectivity": ["lan"],
+      "images": {
+        "small": "/drivers/hilux-i4-button/assets/images/small.png",
+        "large": "/drivers/hilux-i4-button/assets/images/large.png"
+      },
+      "settings": [
+        {
+          "id": "address",
+          "type": "text",
+          "label": { "en": "i4 IP Address" },
+          "value": ""
+        },
+        {
+          "id": "input",
+          "type": "number",
+          "label": { "en": "Input number (0-3)" },
+          "hint": { "en": "Which physical input on the i4 this button device represents. Set during pairing." },
+          "value": 0,
+          "min": 0,
+          "max": 3,
+          "step": 1
+        },
+        {
+          "type": "group",
+          "label": { "en": "Button behavior" },
+          "hint": { "en": "This button controls all HiluX lights in the same zone as this device. The app generates and deploys the i4 script automatically." },
+          "children": [
+            {
+              "id": "dim_rate",
+              "type": "number",
+              "label": { "en": "Dim speed (1 slow – 5 fast)" },
+              "hint": { "en": "5 sweeps the full brightness range in about 5 seconds; 1 takes about 25 seconds." },
+              "value": 5,
+              "min": 1,
+              "max": 5,
+              "step": 1
+            },
+            {
+              "id": "dim_floor",
+              "type": "number",
+              "label": { "en": "Dim floor (%)" },
+              "hint": { "en": "Hold-to-dim never goes below this brightness." },
+              "value": 5,
+              "min": 1,
+              "max": 50,
+              "step": 1
+            },
+            {
+              "id": "ct_sweep_s",
+              "type": "number",
+              "label": { "en": "Colour sweep time (seconds)" },
+              "hint": { "en": "Tap+hold sweeps the full warm-to-cool range in this many seconds." },
+              "value": 5,
+              "min": 2,
+              "max": 30,
+              "step": 1
+            },
+            {
+              "id": "preset_double",
+              "type": "number",
+              "label": { "en": "Double push: dim to (%)" },
+              "hint": { "en": "0 disables the double-push preset." },
+              "value": 20,
+              "min": 0,
+              "max": 100,
+              "step": 1
+            },
+            {
+              "id": "preset_triple",
+              "type": "number",
+              "label": { "en": "Triple push: dim to (%)" },
+              "hint": { "en": "0 disables the triple-push preset." },
+              "value": 50,
+              "min": 0,
+              "max": 100,
+              "step": 1
+            },
+            {
+              "id": "fade_on",
+              "type": "number",
+              "label": { "en": "Switch-on fade (seconds)" },
+              "value": 1.5,
+              "min": 0,
+              "max": 10,
+              "step": 0.1
+            },
+            {
+              "id": "fade_off",
+              "type": "number",
+              "label": { "en": "Switch-off fade (seconds)" },
+              "value": 0.5,
+              "min": 0,
+              "max": 10,
+              "step": 0.1
             }
           ]
         }

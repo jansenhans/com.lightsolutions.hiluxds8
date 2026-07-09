@@ -3,5 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "main": "app.js",
-  "dependencies": {}
+  "dependencies": {
+    "homey-api": "^3.19.1"
+  }
 }
