@@ -96,7 +96,14 @@ class HiluxDS8App extends Homey.App {
       const s = button.settings || {};
       if (!s.address) continue;
       const input = String(num(s.input, 0));
-      const zoneLights = (lightsByZone.get(button.zone) || []).slice().sort();
+      // Numeric IP sort: the first light is the cluster's reference, so the
+      // order must be predictable ("192.168.0.100" must not sort before ".21")
+      const zoneLights = (lightsByZone.get(button.zone) || []).slice().sort((a, b) => {
+        const pa = a.split('.').map(Number);
+        const pb = b.split('.').map(Number);
+        for (let i = 0; i < 4; i++) if (pa[i] !== pb[i]) return pa[i] - pb[i];
+        return 0;
+      });
 
       if (zoneLights.length === 0 && !this._notifiedEmptyZones.has(button.id)) {
         this._notifiedEmptyZones.add(button.id);

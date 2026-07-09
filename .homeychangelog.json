@@ -1,4 +1,7 @@
 {
+  "2.0.3": {
+    "en": "Cluster reference light is now the numerically lowest IP (predictable with 3-digit addresses)."
+  },
   "2.0.2": {
     "en": "Switching a cluster on now aligns colour temperature across all its lights, not just brightness."
   },
