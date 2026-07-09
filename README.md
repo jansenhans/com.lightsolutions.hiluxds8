@@ -1,128 +1,119 @@
 # HiluX DS8 — Homey App
 
-A minimal Homey app to control the LightSolutions HiluX DS8 (Powered by Shelly)
-tunable-white downlight over your local network, using the Shelly Gen3 RPC API.
+A Homey app for the LightSolutions HiluX DS8 (Powered by Shelly) tunable-white
+downlight, using the Shelly Gen3 RPC API over the local network — plus fleet
+management for Shelly i4 Gen3 wall buttons that control groups of these lights
+without any cloud or hub round-trip.
 
 ## What it does
 
-- On/off
-- Brightness (`dim`)
-- Color temperature (`light_temperature`), mapped to the device's native
-  2200K–6000K range via the `CCT` component
-- Polls the device every 10 seconds to keep Homey in sync with changes made
-  from the LightSolutions/Shelly app or physical controls
+**Lights (driver: HiluX DS8)**
+
+- On/off, brightness (`dim`), colour temperature (`light_temperature`,
+  mapped to the device's native 2200 K–6000 K range via the `CCT` component)
+- Pairing by automatic network discovery: scans the /23 around Homey's own
+  address and finds devices reporting `app: "XMOD1"`
+- Polls every 15 seconds to stay in sync with changes made elsewhere
+- **Enforced settings**: each light's *default fade time* and *minimum
+  turn-on brightness* are device settings in Homey; the app re-applies them
+  if they drift — notably after firmware updates, which reset them
+
+**Wall buttons (driver: HiluX Wall Button, Shelly i4 Gen3)**
+
+- Each i4 **input** is paired as its own Homey device; **the zone you place
+  it in is the group of lights it controls** (all HiluX lights in that zone).
+  The physical location of the i4 is irrelevant — one i4 can drive up to four
+  different rooms.
+- The app generates a script per i4 and deploys it over the LAN
+  automatically — on pairing, on settings changes, and within seconds of
+  zone changes (realtime device events; a periodic sweep also heals an i4
+  that was factory-reset). You never edit a script by hand.
+- Button gestures (all local, i4 → lights directly):
+
+  | Press        | Action                                                      |
+  | ------------ | ----------------------------------------------------------- |
+  | single push  | toggle the group on/off — the group comes on with one shared brightness *and* colour, re-aligning any light that drifted |
+  | double push  | dim to preset 1 (default 20%, configurable, 0 disables)     |
+  | triple push  | dim to preset 2 (default 50%, configurable, 0 disables)     |
+  | long push    | fade brightness up/down, alternating per hold; configurable floor so it never fades to invisible |
+  | tap + hold   | sweep colour temperature warm↔cool, alternating per use     |
+  | release      | freeze the running fade exactly where it is (`CCT.DimStop`) |
+
+- Per-button settings: dim speed and floor, colour sweep time, the two
+  presets, and switch-on/off fade times.
+
+Why device-side scripts instead of Homey flows: the Shelly Homey app exposes
+no *button released* event, so hold-to-dim with release-to-stop can't be
+built with flows — and direct i4→light control keeps working even while
+Homey reboots. Every group action reads the lights' real state first, so
+nothing can desync.
+
+**Flow cards** (all fades run on the light's own firmware):
+
+- **Fade to a brightness** / **Fade to a colour temperature** — over 1 s–3 h
+- **Start dimming (hold-to-dim)** / **Stop dimming** — native
+  `CCT.DimUp/DimDown/DimStop` on firmware 2.0+, automatic fallback on older
+- **Start wake-up light** — 1% warm white to a target over up to 3 hours
 
 ## Requirements
 
-- Node.js + npm
-- The [Homey CLI](https://apps.developer.homey.app/the-basics/getting-started):
-  `npm install -g homey`
-- A Homey developer account (free) — sign up at https://tools.developer.homey.app
+- Homey Pro; the app uses the `homey:manager:api` permission (it reads
+  device zones to compute button groups)
+- Lights on Shelly firmware **>= 2.0.0** for native dimming (the flow cards
+  fall back gracefully on older firmware; the button script requires it)
+- **Fixed IP addresses** for lights and i4s (on-device static or DHCP
+  reservation) — buttons address lights by IP
+- Node.js + npm and the [Homey CLI](https://apps.developer.homey.app/the-basics/getting-started)
+  (`npm install -g homey`) to install the app
 
 ## Setup
 
 ```bash
 cd com.lightsolutions.hiluxds8
 npm install
+homey app install   # or `homey app run` for a dev session with live logs
 ```
 
-## Running on your Homey (development mode)
+## Getting started
 
-```bash
-homey app run
-```
+1. Pair your lights: add device → HiluX DS8 → they're discovered
+   automatically. Assign each light to the room (zone) it's in.
+2. Pair your wall buttons: add device → HiluX Wall Button (Shelly i4) →
+   add the inputs that are physically wired.
+3. Move each button device to the zone it should control. Done — the app
+   deploys the i4 script within seconds. Reorganize any time; the scripts
+   follow.
 
-This installs and runs the app live on your Homey without publishing it.
-Logs stream to your terminal.
-
-## Pairing the device
-
-1. In the Homey app, add a new device → HiluX DS8.
-2. Enter the device's local IP address (find it in your router, or in the
-   LightSolutions/Shelly app under device settings → Wi-Fi).
-3. Homey verifies it's a HiluX DS8 by calling `Shelly.GetDeviceInfo` and
-   checking for `app: "XMOD1"`, then creates the device.
-
-**Note:** this assumes a static/reserved IP for the light. If your router
-reassigns its IP, the app will lose contact until you update the address in
-the device's settings in Homey (Advanced settings → Address). A future
-improvement would be pairing by MAC + mDNS discovery instead.
-
-## How it talks to the device
-
-All communication is local HTTP JSON-RPC to `http://<device-ip>/rpc`,
-calling the `CCT.Set` / `CCT.GetStatus` methods on component `cct:0`. See
-`lib/ShellyRpcClient.js`.
-
-## Validating before publishing
-
-```bash
-homey app validate
-```
+The i4 inputs must be in *button* mode (they are by default on an input-only
+device like the i4).
 
 ## Project structure
 
 ```
-app.json                          App + driver manifest
-app.js                            App entry point
+app.json                          App + drivers manifest
+app.js                            Orchestrator: zones -> per-i4 script deploys
 lib/ShellyRpcClient.js            Local Shelly Gen3 RPC client
-drivers/hilux-ds8/driver.js       Pairing logic
-drivers/hilux-ds8/device.js       Capability listeners + polling
-drivers/hilux-ds8/pair/start.html Pairing screen (IP address entry)
-extras/shelly-i4-hold-to-dim.js   Shelly i4 Gen3 button script (see below)
+lib/I4ScriptBuilder.js            Generates the per-i4 button script (mJS)
+lib/I4Deployer.js                 Deploys scripts over RPC (hash-idempotent)
+drivers/hilux-ds8/                Light driver: discovery pairing, polling,
+                                  capability listeners, settings enforcement
+drivers/hilux-i4-button/          Wall button driver: one device per i4 input
+extras/shelly-i4-hold-to-dim.js   LEGACY standalone script (see below)
 ```
 
-## Flow cards
+## Legacy: standalone i4 script (`extras/`)
 
-Since v1.1.0 the app provides custom Flow action cards, all backed by the
-Shelly firmware's native `transition_duration` so fades run on the light
-itself (smooth even if Homey is busy):
+Before v2.0.0 the button script was maintained by hand;
+`extras/shelly-i4-hold-to-dim.js` is that standalone single-input version,
+kept for reference and for running the button logic **without** this app
+(paste into the i4's web UI → Scripts, enable *Run on startup*, edit the
+`LIGHTS` array and constants at the top). When the app manages an i4, it
+disables legacy scripts automatically and deploys its own
+(`hilux-app-buttons`) — don't run both.
 
-- **Fade to a brightness** — fade to X% over 1 s – 3 h
-- **Fade to a colour temperature** — fade to X Kelvin over a duration
-- **Start dimming (hold-to-dim)** — fade toward full/minimum brightness,
-  alternating direction per call like a classic dimmer (v1.2.0)
-- **Stop dimming** — freeze the light at its current brightness (v1.2.0)
-- **Start wake-up light** — from 1% warm white to a target brightness and
-  colour temperature over up to 3 hours
+## Notes
 
-## Extra: Shelly i4 wall-button script (`extras/shelly-i4-hold-to-dim.js`)
-
-A companion mJS script that runs **on a Shelly i4 Gen3** (not on Homey) and
-gives one wall button full control of a group of HiluX DS8 lights, entirely
-over the local network:
-
-| Press        | Action                                                     |
-| ------------ | ---------------------------------------------------------- |
-| single push  | toggle all lights on/off (based on the actual light state) |
-| double push  | dim to 20% (only when on)                                  |
-| triple push  | dim to 50% (only when on)                                  |
-| long push    | fade brightness up/down, alternating direction each hold   |
-| tap + hold   | sweep colour temperature warm/cool, alternating each use   |
-| release      | freeze at the current level                                |
-
-Why a device-side script instead of Homey flows: the Shelly Homey app exposes
-no *button released* event, so true hold-to-dim/release-to-stop cannot be
-built with flows. The script sees `btn_up` the instant the button is released
-and halts all lights with the native `CCT.DimStop` — they freeze at exactly
-the same brightness. It also can't desync: every action reads the lights'
-real state first (no shadow variables).
-
-**Requires light firmware >= 2.0.0** for `CCT.DimUp`/`DimDown`/`DimStop`.
-(The Homey app's *Start/Stop dimming* flow cards use the same native calls
-and fall back automatically to a timed fade + read-and-freeze on older
-firmware.) Note: Shelly firmware updates reset the light's default
-`transition_duration` to 3.0 s — re-apply your preferred value afterwards.
-
-**Install:** open the i4's web UI → Scripts → create a script, paste the file,
-enable *Run on startup*, and start it. Edit the `LIGHTS` array (the lights'
-IP addresses), `DIM_RATE` (1 = slow, ~25 s full sweep; 5 = fast, ~5 s) and
-`DIM_FLOOR` (dim-down stops at this %, so a held dim never fades the lights
-to invisible) to taste. The input must be in *button* mode. Give the lights and the i4 fixed
-IP addresses (static or DHCP reservations) — the script addresses the lights
-directly.
-
-**Recommended light setting:** set `min_brightness_on_toggle` to ~10 on each
-light (`CCT.SetConfig {"id":0,"config":{"min_brightness_on_toggle":10}}`).
-After dimming down to 1% — which is invisible — a plain toggle-on would
-otherwise restore that invisible 1% and the lights appear dead.
+- Shelly firmware updates reset the lights' `transition_duration` and
+  `min_brightness_on_toggle` — the app's settings enforcement re-applies
+  them automatically (on startup, hourly, and when a light recovers).
+- Validating: `homey app validate`

@@ -1,3 +1,6 @@
+// LEGACY STANDALONE VERSION — since app v2.0.0 the Homey app generates and
+// deploys this logic automatically per i4 (see lib/I4ScriptBuilder.js).
+// Use this file only to run the button logic WITHOUT the Homey app.
 // Bathroom 2 button 1 (input:0) -> HiluX DS8 downlights, all-local control:
 //   single push:  toggle all lights on/off (based on actual light state)
 //   double push:  dim to 20% (only when lights are on)
