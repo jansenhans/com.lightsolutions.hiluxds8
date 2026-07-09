@@ -3,12 +3,19 @@
 //   double push:  dim to 20% (only when lights are on)
 //   triple push:  dim to 50% (only when lights are on)
 //   long push:    dim up/down (alternating); release freezes at current level
+//   tap + hold:   colour temperature warm/cool sweep (alternating); release freezes
 // Requires light firmware >= 2.0.0 (native CCT.DimUp/DimDown/DimStop).
 let LIGHTS = ["192.168.0.21", "192.168.0.22", "192.168.0.23", "192.168.0.24"];
 let DIM_RATE = 5;   // 1 (slow, ~25 s full range) .. 5 (fast, ~5 s full range)
 let DIM_FLOOR = 5;  // dim-down stops here, so the lights never fade to invisible
-let dimUp = true;   // direction of the next long push
+let CT_MIN = 2200;  // warm end of the sweep (K)
+let CT_MAX = 6000;  // cool end of the sweep (K)
+let CT_SWEEP_S = 5; // seconds for a full warm-to-cool sweep
+let TAP_HOLD_GAP = 0.6; // max seconds between a tap's release and the hold's press
+let dimUp = true;   // direction of the next brightness hold
+let ctUp = true;    // direction of the next colour hold
 let fading = false;
+let ctFading = false;
 
 // Fire-and-forget RPC that can never crash the script: an unreachable light
 // keeps calls in flight until timeout, and stacked button presses can then
@@ -103,18 +110,52 @@ function startDim() {
   });
 }
 
-function stopDim() {
-  if (!fading) return;
+// Tap + hold: sweep colour temperature between CT_MIN and CT_MAX,
+// alternating direction each use. Only when the lights are on.
+function startCt() {
+  withStatus(function (st) {
+    if (!st || st.output !== true) return;
+    let ct = typeof st.ct === "number" ? st.ct : 3150;
+    if (ct <= CT_MIN + 50) ctUp = true;
+    else if (ct >= CT_MAX - 50) ctUp = false;
+    let target = ctUp ? CT_MAX : CT_MIN;
+    ctUp = !ctUp; // alternate for the next tap+hold
+    ctFading = true;
+    let duration = Math.max(0.5, Math.abs(target - ct) * CT_SWEEP_S / (CT_MAX - CT_MIN));
+    callAll("CCT.Set", "ct=" + JSON.stringify(target) + "&transition_duration=" + JSON.stringify(duration));
+  });
+}
+
+// DimStop freezes both brightness and colour transitions mid-flight.
+function stopSweep() {
+  if (!fading && !ctFading) return;
   fading = false;
+  ctFading = false;
   callAll("CCT.DimStop");
 }
+
+// Gesture detection: Shelly's classifier handles single/double/triple/long
+// push. "Tap then hold" is ours: a short press (<0.35 s) followed within
+// TAP_HOLD_GAP by a press that becomes a long_push. The classifier stays
+// quiet about the tap because the hold starts inside its multi-push window.
+let lastTapEnd = 0;
+let downTs = 0;
+let tapPreceded = false;
 
 Shelly.addEventHandler(function (ev) {
   if (ev.component !== "input:0") return;
   let e = ev.info.event;
-  if (e === "long_push") startDim();
-  else if (e === "btn_up") stopDim();
-  else if (e === "single_push") toggle();
+  let ts = (ev.info && typeof ev.info.ts === "number") ? ev.info.ts : 0;
+  if (e === "btn_down") {
+    tapPreceded = ts > 0 && lastTapEnd > 0 && (ts - lastTapEnd) < TAP_HOLD_GAP;
+    downTs = ts;
+  } else if (e === "btn_up") {
+    if (ts > 0 && downTs > 0 && (ts - downTs) < 0.35) lastTapEnd = ts;
+    stopSweep();
+  } else if (e === "long_push") {
+    if (tapPreceded) startCt();
+    else startDim();
+  } else if (e === "single_push") toggle();
   else if (e === "double_push") dimTo(20);
   else if (e === "triple_push") dimTo(50);
 });

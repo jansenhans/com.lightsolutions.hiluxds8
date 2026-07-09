@@ -98,7 +98,8 @@ over the local network:
 | double push  | dim to 20% (only when on)                                  |
 | triple push  | dim to 50% (only when on)                                  |
 | long push    | fade brightness up/down, alternating direction each hold   |
-| release      | freeze at the current brightness                           |
+| tap + hold   | sweep colour temperature warm/cool, alternating each use   |
+| release      | freeze at the current level                                |
 
 Why a device-side script instead of Homey flows: the Shelly Homey app exposes
 no *button released* event, so true hold-to-dim/release-to-stop cannot be
