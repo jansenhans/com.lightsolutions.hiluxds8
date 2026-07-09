@@ -25,11 +25,27 @@ class HiluxDS8App extends Homey.App {
     this._notifiedEmptyZones = new Set();
 
     this._api = await HomeyAPI.createAppAPI({ homey: this.homey });
+    this._deployedHashes = new Map(); // i4 address -> last deployed config hash
 
-    // First rebuild shortly after startup (lets drivers finish init), then
-    // periodically to catch zone moves, which have no direct event hook here.
-    this.homey.setTimeout(() => this._rebuildAll('app start').catch((e) => this.error(e)), 15000);
-    this.homey.setInterval(() => this._rebuildAll('periodic').catch((e) => this.error(e)), REBUILD_INTERVAL_MS);
+    // Keep the device cache live and react to zone moves / renames instantly.
+    // Without connect(), getDevices() serves a snapshot from app startup and
+    // zone changes are never seen.
+    await this._api.devices.connect();
+    const appPrefix = `homey:app:${this.homey.manifest.id}:`;
+    const onDeviceEvent = (device) => {
+      if (device && device.driverId && device.driverId.startsWith(appPrefix)) {
+        this.scheduleRebuild('device event');
+      }
+    };
+    this._api.devices.on('device.update', onDeviceEvent);
+    this._api.devices.on('device.create', onDeviceEvent);
+    this._api.devices.on('device.delete', onDeviceEvent);
+
+    // First rebuild shortly after startup (lets drivers finish init), then a
+    // periodic full verify (force) that also heals an i4 that was rebooted
+    // or factory-reset behind our back.
+    this.homey.setTimeout(() => this._rebuildAll('app start', true).catch((e) => this.error(e)), 15000);
+    this.homey.setInterval(() => this._rebuildAll('periodic', true).catch((e) => this.error(e)), REBUILD_INTERVAL_MS);
   }
 
   // Called by button devices on init/settings/delete. Debounced: pairing an
@@ -43,11 +59,11 @@ class HiluxDS8App extends Homey.App {
     }, REBUILD_DEBOUNCE_MS);
   }
 
-  async _rebuildAll(reason) {
+  async _rebuildAll(reason, force = false) {
     if (this._rebuilding) { this._rebuildQueued = true; return; }
     this._rebuilding = true;
     try {
-      await this._doRebuild(reason);
+      await this._doRebuild(reason, force);
     } finally {
       this._rebuilding = false;
       if (this._rebuildQueued) {
@@ -57,7 +73,7 @@ class HiluxDS8App extends Homey.App {
     }
   }
 
-  async _doRebuild(reason) {
+  async _doRebuild(reason, force = false) {
     const all = Object.values(await this._api.devices.getDevices());
     const appPrefix = `homey:app:${this.homey.manifest.id}:`;
 
@@ -106,7 +122,12 @@ class HiluxDS8App extends Homey.App {
     for (const [address, configs] of perI4) {
       try {
         const { code, hash } = ScriptBuilder.generate(configs);
+        // Device events fire often (renames, capability chatter) — only talk
+        // to the i4 when the config actually changed. Periodic runs force a
+        // full on-device verify.
+        if (!force && this._deployedHashes.get(address) === hash) continue;
         const result = await Deployer.deploy(address, code, hash, (m) => this.log(m));
+        this._deployedHashes.set(address, hash);
         if (result.changed) this.log(`Rebuild (${reason}): i4 ${address} updated`);
       } catch (err) {
         this.error(`Rebuild (${reason}): i4 ${address} failed:`, err.message);

@@ -1,4 +1,7 @@
 {
+  "2.0.1": {
+    "en": "Zone moves now update button scripts instantly (realtime device events); fixed stale device cache."
+  },
   "2.0.0": {
     "en": "New: HiluX Wall Button driver for the Shelly i4 Gen3. Pair each button, place it in the zone it controls, and the app generates and deploys the i4 script automatically."
   },
