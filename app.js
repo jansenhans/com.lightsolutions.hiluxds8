@@ -8,6 +8,9 @@ const Deployer = require('./lib/I4Deployer');
 
 const REBUILD_DEBOUNCE_MS = 3000;
 const REBUILD_INTERVAL_MS = 5 * 60 * 1000; // catch zone moves and drift
+const DEPLOY_RETRY_DELAY_MS = 10000;
+const NOTIFY_AFTER_CONSECUTIVE_FAILURES = 3; // ~15 min of real outage
+const NOTIFY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const LIGHT_DRIVER = 'hilux-ds8';
 const BUTTON_DRIVER = 'hilux-i4-button';
 
@@ -26,6 +29,8 @@ class HiluxDS8App extends Homey.App {
 
     this._api = await HomeyAPI.createAppAPI({ homey: this.homey });
     this._deployedHashes = new Map(); // i4 address -> last deployed config hash
+    this._deployFailures = new Map(); // i4 address -> consecutive failure count
+    this._failureNotifiedAt = new Map(); // i4 address -> last notification ts
 
     // Keep the device cache live and react to zone moves / renames instantly.
     // Without connect(), getDevices() serves a snapshot from app startup and
@@ -127,20 +132,46 @@ class HiluxDS8App extends Homey.App {
     }
 
     for (const [address, configs] of perI4) {
+      const { code, hash } = ScriptBuilder.generate(configs);
+      // Device events fire often (renames, capability chatter) — only talk
+      // to the i4 when the config actually changed. Periodic runs force a
+      // full on-device verify.
+      if (!force && this._deployedHashes.get(address) === hash) continue;
+
       try {
-        const { code, hash } = ScriptBuilder.generate(configs);
-        // Device events fire often (renames, capability chatter) — only talk
-        // to the i4 when the config actually changed. Periodic runs force a
-        // full on-device verify.
-        if (!force && this._deployedHashes.get(address) === hash) continue;
-        const result = await Deployer.deploy(address, code, hash, (m) => this.log(m));
+        let result;
+        try {
+          result = await Deployer.deploy(address, code, hash, (m) => this.log(m));
+        } catch (firstErr) {
+          // Transient Wi-Fi blips are common on battery/IoT links — retry
+          // once before treating this as a failure
+          await new Promise((r) => this.homey.setTimeout(r, DEPLOY_RETRY_DELAY_MS));
+          result = await Deployer.deploy(address, code, hash, (m) => this.log(m));
+        }
         this._deployedHashes.set(address, hash);
         if (result.changed) this.log(`Rebuild (${reason}): i4 ${address} updated`);
+
+        // Recovered after a notified outage? Close the loop.
+        if (this._failureNotifiedAt.has(address)) {
+          this._failureNotifiedAt.delete(address);
+          await this.homey.notifications.createNotification({
+            excerpt: `HiluX: the i4 at ${address} is reachable again — button script verified.`,
+          }).catch(() => {});
+        }
+        this._deployFailures.delete(address);
       } catch (err) {
-        this.error(`Rebuild (${reason}): i4 ${address} failed:`, err.message);
-        await this.homey.notifications.createNotification({
-          excerpt: `HiluX: deploying the button script to the i4 at ${address} failed: ${err.message}`,
-        }).catch(() => {});
+        const failures = (this._deployFailures.get(address) || 0) + 1;
+        this._deployFailures.set(address, failures);
+        this.error(`Rebuild (${reason}): i4 ${address} failed (${failures}x):`, err.message);
+
+        // Only alert on persistent outage, at most once per cooldown window
+        const lastNotified = this._failureNotifiedAt.get(address) || 0;
+        if (failures >= NOTIFY_AFTER_CONSECUTIVE_FAILURES && Date.now() - lastNotified > NOTIFY_COOLDOWN_MS) {
+          this._failureNotifiedAt.set(address, Date.now());
+          await this.homey.notifications.createNotification({
+            excerpt: `HiluX: the i4 at ${address} has been unreachable for ${failures} checks — its button script can't be verified. Check the device's power and Wi-Fi.`,
+          }).catch(() => {});
+        }
       }
     }
   }

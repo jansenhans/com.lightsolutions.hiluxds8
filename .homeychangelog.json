@@ -1,4 +1,7 @@
 {
+  "2.0.4": {
+    "en": "Deploy failures now retry before alerting; notifications only fire after a persistent outage (with a recovery notice), max once per day per i4."
+  },
   "2.0.3": {
     "en": "Cluster reference light is now the numerically lowest IP (predictable with 3-digit addresses)."
   },
