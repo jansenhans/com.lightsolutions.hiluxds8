@@ -1,4 +1,7 @@
 {
+  "2.0.5": {
+    "en": "Light settings checks are staggered at startup and retry quietly on transient timeouts."
+  },
   "2.0.4": {
     "en": "Deploy failures now retry before alerting; notifications only fire after a persistent outage (with a recovery notice), max once per day per i4."
   },

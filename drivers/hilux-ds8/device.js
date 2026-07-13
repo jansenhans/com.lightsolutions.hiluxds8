@@ -51,10 +51,22 @@ class HiluxDS8Device extends Homey.Device {
     // A light appearing (or reappearing) can change a button cluster
     if (this.homey.app.scheduleRebuild) this.homey.app.scheduleRebuild('light init');
 
-    await this._enforceConfig().catch((err) => this.error('Config enforcement failed:', err));
+    // Stagger the startup check: at app boot every light initializes at once,
+    // and the burst of requests over Wi-Fi causes spurious timeouts at scale
+    const jitter = 2000 + Math.floor(Math.random() * 28000);
+    this.homey.setTimeout(() => this._enforceWithRetry(), jitter);
     this._enforceInterval = this.homey.setInterval(() => {
-      this._enforceConfig().catch((err) => this.error('Config enforcement failed:', err));
+      this._enforceWithRetry();
     }, ENFORCE_INTERVAL_MS);
+  }
+
+  _enforceWithRetry() {
+    this._enforceConfig().catch(() => {
+      // One quiet retry — transient timeouts are normal on busy Wi-Fi
+      this.homey.setTimeout(() => {
+        this._enforceConfig().catch((err) => this.error('Config enforcement failed (after retry):', err.message));
+      }, 15000);
+    });
   }
 
   // Keep the light's on-device settings at their configured values. Firmware
@@ -119,9 +131,7 @@ class HiluxDS8Device extends Homey.Device {
     }
     if (changedKeys.includes('default_transition') || changedKeys.includes('min_on_toggle')) {
       // Settings are persisted right after onSettings resolves — apply then
-      this.homey.setTimeout(() => {
-        this._enforceConfig().catch((err) => this.error('Config enforcement failed:', err));
-      }, 1000);
+      this.homey.setTimeout(() => this._enforceWithRetry(), 1000);
     }
   }
 
@@ -147,7 +157,7 @@ class HiluxDS8Device extends Homey.Device {
       await this.setAvailable().catch(this.error);
       // Recovery from unavailable often means the light rebooted (e.g. a
       // firmware update) — exactly when on-device settings get reset.
-      await this._enforceConfig().catch((err) => this.error('Config enforcement failed:', err));
+      this._enforceWithRetry();
     }
   }
 
