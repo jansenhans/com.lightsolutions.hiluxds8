@@ -58,6 +58,23 @@ nothing can desync.
   `CCT.DimUp/DimDown/DimStop` on firmware 2.0+, automatic fallback on older
 - **Start wake-up light** — 1% warm white to a target over up to 3 hours
 
+**Light groups** (since v2.1.0): virtual light devices that broadcast one
+brightness / colour temperature / on-off command to every HiluX light in a
+chosen set of zones at once — e.g. a "First Floor" tile, or "All Bedrooms"
+across floors.
+
+- Membership is by zones (each selected zone includes its sub-zones) and is
+  resolved when you use the group, so lights that move between rooms follow
+  automatically. A zone may appear in any number of groups.
+- Groups **broadcast once — they never enforce**: after a group command,
+  individual rooms are free to diverge (wall button, room control) until
+  the next deliberate group command. Overlapping groups therefore can't
+  fight each other; the lights simply follow whoever commanded them last.
+- Commands fan out over the LAN in parallel with one shared value and one
+  shared fade time (per-group *Fade time* setting), so the whole group
+  sweeps in sync. The tile mirrors the group's reference light (lowest IP)
+  for display.
+
 ## Requirements
 
 - Homey Pro; the app uses the `homey:manager:api` permission (it reads
@@ -86,6 +103,8 @@ homey app install   # or `homey app run` for a dev session with live logs
 3. Move each button device to the zone it should control. Done — the app
    deploys the i4 script within seconds. Reorganize any time; the scripts
    follow.
+4. Optional: add device → HiluX Light Group → name it and tick the zones it
+   should cover. One tile then dims or re-tints all those rooms in one go.
 
 The i4 inputs must be in *button* mode (they are by default on an input-only
 device like the i4).
@@ -101,6 +120,8 @@ lib/I4Deployer.js                 Deploys scripts over RPC (hash-idempotent)
 drivers/hilux-ds8/                Light driver: discovery pairing, polling,
                                   capability listeners, settings enforcement
 drivers/hilux-i4-button/          Wall button driver: one device per i4 input
+drivers/hilux-group/              Virtual light group: zone-set membership,
+                                  broadcast-once fan-out, reference mirror
 extras/shelly-i4-hold-to-dim.js   LEGACY standalone script (see below)
 ```
 

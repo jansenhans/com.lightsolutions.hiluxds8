@@ -18,6 +18,17 @@ function num(value, fallback) {
   return typeof value === 'number' && !Number.isNaN(value) ? value : fallback;
 }
 
+// Numeric IP sort: the first light is a cluster/group's reference, so the
+// order must be predictable ("192.168.0.100" must not sort before ".21")
+function sortAddresses(addresses) {
+  return addresses.slice().sort((a, b) => {
+    const pa = a.split('.').map(Number);
+    const pb = b.split('.').map(Number);
+    for (let i = 0; i < 4; i++) if (pa[i] !== pb[i]) return pa[i] - pb[i];
+    return 0;
+  });
+}
+
 class HiluxDS8App extends Homey.App {
   async onInit() {
     this.log('HiluX DS8 app has been initialized');
@@ -51,6 +62,46 @@ class HiluxDS8App extends Homey.App {
     // or factory-reset behind our back.
     this.homey.setTimeout(() => this._rebuildAll('app start', true).catch((e) => this.error(e)), 15000);
     this.homey.setInterval(() => this._rebuildAll('periodic', true).catch((e) => this.error(e)), REBUILD_INTERVAL_MS);
+  }
+
+  // --- virtual light groups (driver hilux-group) ---------------------------
+
+  // Flat zone list for the group pairing view.
+  async getZoneTree() {
+    const zones = Object.values(await this._api.zones.getZones());
+    return zones.map((z) => ({ id: z.id, name: z.name, parent: z.parent || null }));
+  }
+
+  // Resolve a stored zone set to member light addresses. Each selected zone
+  // includes all its descendant zones, so groups follow the Homey zone tree
+  // dynamically — lights moved between rooms need no reconfiguration.
+  async resolveGroupAddresses(zoneIds) {
+    const zones = Object.values(await this._api.zones.getZones());
+    const selected = new Set(zoneIds);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const z of zones) {
+        if (z.parent && selected.has(z.parent) && !selected.has(z.id)) {
+          selected.add(z.id);
+          grew = true;
+        }
+      }
+    }
+
+    const appPrefix = `homey:app:${this.homey.manifest.id}:`;
+    const all = Object.values(await this._api.devices.getDevices());
+    const addresses = all
+      .filter((d) => d.driverId === appPrefix + LIGHT_DRIVER
+        && selected.has(d.zone)
+        && d.settings && d.settings.address)
+      .map((d) => d.settings.address);
+
+    const zoneNames = zoneIds
+      .map((id) => { const z = zones.find((x) => x.id === id); return z ? z.name : null; })
+      .filter(Boolean);
+
+    return { addresses: sortAddresses(addresses), zoneNames };
   }
 
   // Called by button devices on init/settings/delete. Debounced: pairing an
@@ -105,14 +156,7 @@ class HiluxDS8App extends Homey.App {
       const s = button.settings || {};
       if (!s.address) continue;
       const input = String(num(s.input, 0));
-      // Numeric IP sort: the first light is the cluster's reference, so the
-      // order must be predictable ("192.168.0.100" must not sort before ".21")
-      const zoneLights = (lightsByZone.get(button.zone) || []).slice().sort((a, b) => {
-        const pa = a.split('.').map(Number);
-        const pb = b.split('.').map(Number);
-        for (let i = 0; i < 4; i++) if (pa[i] !== pb[i]) return pa[i] - pb[i];
-        return 0;
-      });
+      const zoneLights = sortAddresses(lightsByZone.get(button.zone) || []);
 
       if (zoneLights.length === 0 && !this._notifiedEmptyZones.has(button.id)) {
         this._notifiedEmptyZones.add(button.id);

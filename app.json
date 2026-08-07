@@ -1,14 +1,24 @@
 {
   "id": "com.lightsolutions.hiluxds8",
-  "version": "2.0.6",
+  "version": "2.1.0",
   "compatibility": ">=5.0.0",
   "sdk": 3,
-  "platforms": ["local"],
-  "name": { "en": "HiluX DS8" },
-  "description": { "en": "Control your LightSolutions HiluX DS8 (Powered by Shelly) tunable white downlight." },
+  "platforms": [
+    "local"
+  ],
+  "name": {
+    "en": "HiluX DS8"
+  },
+  "description": {
+    "en": "Control your LightSolutions HiluX DS8 (Powered by Shelly) tunable white downlight."
+  },
   "brandColor": "#5E35B1",
-  "category": ["lights"],
-  "permissions": ["homey:manager:api"],
+  "category": [
+    "lights"
+  ],
+  "permissions": [
+    "homey:manager:api"
+  ],
   "images": {
     "small": "/assets/images/small.png",
     "large": "/assets/images/large.png"
@@ -20,9 +30,15 @@
     "actions": [
       {
         "id": "fade_to_brightness",
-        "title": { "en": "Fade to a brightness" },
-        "titleFormatted": { "en": "Fade to [[brightness]] % over [[duration]] seconds" },
-        "hint": { "en": "Smoothly change the brightness over a duration. The fade runs on the light itself." },
+        "title": {
+          "en": "Fade to a brightness"
+        },
+        "titleFormatted": {
+          "en": "Fade to [[brightness]] % over [[duration]] seconds"
+        },
+        "hint": {
+          "en": "Smoothly change the brightness over a duration. The fade runs on the light itself."
+        },
         "args": [
           {
             "type": "device",
@@ -35,7 +51,9 @@
             "min": 0,
             "max": 100,
             "step": 1,
-            "placeholder": { "en": "Brightness (%)" }
+            "placeholder": {
+              "en": "Brightness (%)"
+            }
           },
           {
             "type": "number",
@@ -43,15 +61,23 @@
             "min": 1,
             "max": 10800,
             "step": 1,
-            "placeholder": { "en": "Duration (seconds)" }
+            "placeholder": {
+              "en": "Duration (seconds)"
+            }
           }
         ]
       },
       {
         "id": "fade_to_temperature",
-        "title": { "en": "Fade to a colour temperature" },
-        "titleFormatted": { "en": "Fade to [[temperature]] K over [[duration]] seconds" },
-        "hint": { "en": "Smoothly change the colour temperature (2200 K warm – 6000 K cool) over a duration." },
+        "title": {
+          "en": "Fade to a colour temperature"
+        },
+        "titleFormatted": {
+          "en": "Fade to [[temperature]] K over [[duration]] seconds"
+        },
+        "hint": {
+          "en": "Smoothly change the colour temperature (2200 K warm – 6000 K cool) over a duration."
+        },
         "args": [
           {
             "type": "device",
@@ -64,7 +90,9 @@
             "min": 2200,
             "max": 6000,
             "step": 50,
-            "placeholder": { "en": "Temperature (K)" }
+            "placeholder": {
+              "en": "Temperature (K)"
+            }
           },
           {
             "type": "number",
@@ -72,15 +100,23 @@
             "min": 1,
             "max": 10800,
             "step": 1,
-            "placeholder": { "en": "Duration (seconds)" }
+            "placeholder": {
+              "en": "Duration (seconds)"
+            }
           }
         ]
       },
       {
         "id": "start_dimming",
-        "title": { "en": "Start dimming (hold-to-dim)" },
-        "titleFormatted": { "en": "Start dimming ([[duration]] s for the full range)" },
-        "hint": { "en": "Starts fading the brightness up or down, alternating direction each time like a classic dimmer. Combine with 'Stop dimming' on button release." },
+        "title": {
+          "en": "Start dimming (hold-to-dim)"
+        },
+        "titleFormatted": {
+          "en": "Start dimming ([[duration]] s for the full range)"
+        },
+        "hint": {
+          "en": "Starts fading the brightness up or down, alternating direction each time like a classic dimmer. Combine with 'Stop dimming' on button release."
+        },
         "args": [
           {
             "type": "device",
@@ -93,14 +129,20 @@
             "min": 1,
             "max": 60,
             "step": 1,
-            "placeholder": { "en": "Seconds for full range (e.g. 5)" }
+            "placeholder": {
+              "en": "Seconds for full range (e.g. 5)"
+            }
           }
         ]
       },
       {
         "id": "stop_dimming",
-        "title": { "en": "Stop dimming" },
-        "hint": { "en": "Freezes the light at its current brightness, stopping any running fade." },
+        "title": {
+          "en": "Stop dimming"
+        },
+        "hint": {
+          "en": "Freezes the light at its current brightness, stopping any running fade."
+        },
         "args": [
           {
             "type": "device",
@@ -111,9 +153,15 @@
       },
       {
         "id": "wake_up_light",
-        "title": { "en": "Start wake-up light" },
-        "titleFormatted": { "en": "Wake up to [[brightness]] % and [[temperature]] K over [[duration]] minutes" },
-        "hint": { "en": "Starts at 1% warm white and slowly brightens to the target brightness and colour temperature — a sunrise in your ceiling." },
+        "title": {
+          "en": "Start wake-up light"
+        },
+        "titleFormatted": {
+          "en": "Wake up to [[brightness]] % and [[temperature]] K over [[duration]] minutes"
+        },
+        "hint": {
+          "en": "Starts at 1% warm white and slowly brightens to the target brightness and colour temperature — a sunrise in your ceiling."
+        },
         "args": [
           {
             "type": "device",
@@ -126,7 +174,9 @@
             "min": 1,
             "max": 100,
             "step": 1,
-            "placeholder": { "en": "Target brightness (%)" }
+            "placeholder": {
+              "en": "Target brightness (%)"
+            }
           },
           {
             "type": "number",
@@ -134,7 +184,9 @@
             "min": 2200,
             "max": 6000,
             "step": 50,
-            "placeholder": { "en": "Target temperature (K)" }
+            "placeholder": {
+              "en": "Target temperature (K)"
+            }
           },
           {
             "type": "number",
@@ -142,7 +194,9 @@
             "min": 1,
             "max": 180,
             "step": 1,
-            "placeholder": { "en": "Duration (minutes)" }
+            "placeholder": {
+              "en": "Duration (minutes)"
+            }
           }
         ]
       }
@@ -151,11 +205,21 @@
   "drivers": [
     {
       "id": "hilux-ds8",
-      "name": { "en": "HiluX DS8" },
+      "name": {
+        "en": "HiluX DS8"
+      },
       "class": "light",
-      "capabilities": ["onoff", "dim", "light_temperature"],
-      "platforms": ["local"],
-      "connectivity": ["lan"],
+      "capabilities": [
+        "onoff",
+        "dim",
+        "light_temperature"
+      ],
+      "platforms": [
+        "local"
+      ],
+      "connectivity": [
+        "lan"
+      ],
       "images": {
         "small": "/drivers/hilux-ds8/assets/images/small.png",
         "large": "/drivers/hilux-ds8/assets/images/large.png"
@@ -164,35 +228,53 @@
         {
           "id": "address",
           "type": "text",
-          "label": { "en": "IP Address" },
+          "label": {
+            "en": "IP Address"
+          },
           "value": ""
         },
         {
           "type": "group",
-          "label": { "en": "Enforced light settings" },
-          "hint": { "en": "The app keeps these settings applied on the light itself and re-applies them if they drift — e.g. after a firmware update, which resets them." },
+          "label": {
+            "en": "Enforced light settings"
+          },
+          "hint": {
+            "en": "The app keeps these settings applied on the light itself and re-applies them if they drift — e.g. after a firmware update, which resets them."
+          },
           "children": [
             {
               "id": "default_transition",
               "type": "number",
-              "label": { "en": "Default fade time (seconds)" },
-              "hint": { "en": "Used by the light for any command that doesn't specify its own fade time." },
+              "label": {
+                "en": "Default fade time (seconds)"
+              },
+              "hint": {
+                "en": "Used by the light for any command that doesn't specify its own fade time."
+              },
               "value": 1,
               "min": 0,
               "max": 10,
               "step": 0.1,
-              "units": { "en": "s" }
+              "units": {
+                "en": "s"
+              }
             },
             {
               "id": "min_on_toggle",
               "type": "number",
-              "label": { "en": "Minimum brightness when switched on (%)" },
-              "hint": { "en": "A plain 'on' never comes up dimmer than this, so the light is always visibly on." },
+              "label": {
+                "en": "Minimum brightness when switched on (%)"
+              },
+              "hint": {
+                "en": "A plain 'on' never comes up dimmer than this, so the light is always visibly on."
+              },
               "value": 5,
               "min": 1,
               "max": 100,
               "step": 1,
-              "units": { "en": "%" }
+              "units": {
+                "en": "%"
+              }
             }
           ]
         }
@@ -201,7 +283,9 @@
         {
           "id": "list_devices",
           "template": "list_devices",
-          "navigation": { "next": "add_devices" }
+          "navigation": {
+            "next": "add_devices"
+          }
         },
         {
           "id": "add_devices",
@@ -211,11 +295,17 @@
     },
     {
       "id": "hilux-i4-button",
-      "name": { "en": "HiluX Wall Button (Shelly i4)" },
+      "name": {
+        "en": "HiluX Wall Button (Shelly i4)"
+      },
       "class": "other",
       "capabilities": [],
-      "platforms": ["local"],
-      "connectivity": ["lan"],
+      "platforms": [
+        "local"
+      ],
+      "connectivity": [
+        "lan"
+      ],
       "images": {
         "small": "/drivers/hilux-i4-button/assets/images/small.png",
         "large": "/drivers/hilux-i4-button/assets/images/large.png"
@@ -224,14 +314,20 @@
         {
           "id": "address",
           "type": "text",
-          "label": { "en": "i4 IP Address" },
+          "label": {
+            "en": "i4 IP Address"
+          },
           "value": ""
         },
         {
           "id": "input",
           "type": "number",
-          "label": { "en": "Input number (0-3)" },
-          "hint": { "en": "Which physical input on the i4 this button device represents. Set during pairing." },
+          "label": {
+            "en": "Input number (0-3)"
+          },
+          "hint": {
+            "en": "Which physical input on the i4 this button device represents. Set during pairing."
+          },
           "value": 0,
           "min": 0,
           "max": 3,
@@ -239,14 +335,22 @@
         },
         {
           "type": "group",
-          "label": { "en": "Button behavior" },
-          "hint": { "en": "This button controls all HiluX lights in the same zone as this device. The app generates and deploys the i4 script automatically." },
+          "label": {
+            "en": "Button behavior"
+          },
+          "hint": {
+            "en": "This button controls all HiluX lights in the same zone as this device. The app generates and deploys the i4 script automatically."
+          },
           "children": [
             {
               "id": "dim_rate",
               "type": "number",
-              "label": { "en": "Dim speed (1 slow – 5 fast)" },
-              "hint": { "en": "5 sweeps the full brightness range in about 5 seconds; 1 takes about 25 seconds." },
+              "label": {
+                "en": "Dim speed (1 slow – 5 fast)"
+              },
+              "hint": {
+                "en": "5 sweeps the full brightness range in about 5 seconds; 1 takes about 25 seconds."
+              },
               "value": 5,
               "min": 1,
               "max": 5,
@@ -255,8 +359,12 @@
             {
               "id": "dim_floor",
               "type": "number",
-              "label": { "en": "Dim floor (%)" },
-              "hint": { "en": "Hold-to-dim never goes below this brightness." },
+              "label": {
+                "en": "Dim floor (%)"
+              },
+              "hint": {
+                "en": "Hold-to-dim never goes below this brightness."
+              },
               "value": 5,
               "min": 1,
               "max": 50,
@@ -265,8 +373,12 @@
             {
               "id": "ct_sweep_s",
               "type": "number",
-              "label": { "en": "Colour sweep time (seconds)" },
-              "hint": { "en": "Tap+hold sweeps the full warm-to-cool range in this many seconds." },
+              "label": {
+                "en": "Colour sweep time (seconds)"
+              },
+              "hint": {
+                "en": "Tap+hold sweeps the full warm-to-cool range in this many seconds."
+              },
               "value": 5,
               "min": 2,
               "max": 30,
@@ -275,8 +387,12 @@
             {
               "id": "preset_double",
               "type": "number",
-              "label": { "en": "Double push: dim to (%)" },
-              "hint": { "en": "0 disables the double-push preset." },
+              "label": {
+                "en": "Double push: dim to (%)"
+              },
+              "hint": {
+                "en": "0 disables the double-push preset."
+              },
               "value": 20,
               "min": 0,
               "max": 100,
@@ -285,8 +401,12 @@
             {
               "id": "preset_triple",
               "type": "number",
-              "label": { "en": "Triple push: dim to (%)" },
-              "hint": { "en": "0 disables the triple-push preset." },
+              "label": {
+                "en": "Triple push: dim to (%)"
+              },
+              "hint": {
+                "en": "0 disables the triple-push preset."
+              },
               "value": 50,
               "min": 0,
               "max": 100,
@@ -295,7 +415,9 @@
             {
               "id": "fade_on",
               "type": "number",
-              "label": { "en": "Switch-on fade (seconds)" },
+              "label": {
+                "en": "Switch-on fade (seconds)"
+              },
               "value": 1.5,
               "min": 0,
               "max": 10,
@@ -304,7 +426,9 @@
             {
               "id": "fade_off",
               "type": "number",
-              "label": { "en": "Switch-off fade (seconds)" },
+              "label": {
+                "en": "Switch-off fade (seconds)"
+              },
               "value": 0.5,
               "min": 0,
               "max": 10,
@@ -317,11 +441,66 @@
         {
           "id": "list_devices",
           "template": "list_devices",
-          "navigation": { "next": "add_devices" }
+          "navigation": {
+            "next": "add_devices"
+          }
         },
         {
           "id": "add_devices",
           "template": "add_devices"
+        }
+      ]
+    },
+    {
+      "id": "hilux-group",
+      "name": {
+        "en": "HiluX Light Group"
+      },
+      "class": "light",
+      "capabilities": [
+        "onoff",
+        "dim",
+        "light_temperature"
+      ],
+      "platforms": [
+        "local"
+      ],
+      "connectivity": [
+        "lan"
+      ],
+      "images": {
+        "small": "/drivers/hilux-group/assets/images/small.png",
+        "large": "/drivers/hilux-group/assets/images/large.png"
+      },
+      "pair": [
+        {
+          "id": "select_zones"
+        }
+      ],
+      "settings": [
+        {
+          "id": "fade_s",
+          "type": "number",
+          "label": {
+            "en": "Fade time"
+          },
+          "hint": {
+            "en": "Transition time for group commands, in seconds. All member lights sweep to the new state together over this time."
+          },
+          "value": 1.5,
+          "min": 0,
+          "max": 60,
+          "units": {
+            "en": "s"
+          }
+        },
+        {
+          "id": "zones_label",
+          "type": "label",
+          "label": {
+            "en": "Zones in this group"
+          },
+          "value": ""
         }
       ]
     }
