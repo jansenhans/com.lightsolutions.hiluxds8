@@ -91,6 +91,31 @@ class HiluxDS8Device extends Homey.Device {
       await this.client.setCctConfig(0, patch);
       this.log('Corrected drifted light settings:', JSON.stringify(patch));
     }
+
+    await this._ensureWebhooks();
+  }
+
+  // Keep cct.on/cct.off webhooks on the light pointing at the app's push
+  // receiver, so on/off state reaches Homey the moment it changes — enforced
+  // alongside the other settings (init, hourly, and on recovery) because
+  // factory resets and address changes clear or stale them.
+  async _ensureWebhooks() {
+    if (!this.homey.app.getPushBaseUrl) return;
+    const url = (await this.homey.app.getPushBaseUrl()) + this.address;
+    const { hooks } = await this.client.call('Webhook.List');
+    for (const event of ['cct.on', 'cct.off']) {
+      const name = `hilux-app-${event}`;
+      const existing = (hooks || []).find((h) => h.name === name);
+      if (!existing) {
+        await this.client.call('Webhook.Create', {
+          cid: 0, enable: true, event, name, urls: [url],
+        });
+        this.log(`Webhook installed: ${event} → ${url}`);
+      } else if (!existing.enable || !Array.isArray(existing.urls) || existing.urls[0] !== url) {
+        await this.client.call('Webhook.Update', { id: existing.id, enable: true, urls: [url] });
+        this.log(`Webhook updated: ${event} → ${url}`);
+      }
+    }
   }
 
   async _startPolling() {
@@ -147,12 +172,27 @@ class HiluxDS8Device extends Homey.Device {
       throw err;
     }
     this._pollFailures = 0;
+    const before = [
+      this.getCapabilityValue('onoff'),
+      this.getCapabilityValue('dim'),
+      this.getCapabilityValue('light_temperature'),
+    ].join('|');
     if (typeof status.output === 'boolean')
       await this.setCapabilityValue('onoff', status.output).catch(this.error);
     if (typeof status.brightness === 'number')
       await this.setCapabilityValue('dim', status.brightness / 100).catch(this.error);
     if (typeof status.ct === 'number')
       await this.setCapabilityValue('light_temperature', ctToHomeyTemperature(status.ct)).catch(this.error);
+    const after = [
+      this.getCapabilityValue('onoff'),
+      this.getCapabilityValue('dim'),
+      this.getCapabilityValue('light_temperature'),
+    ].join('|');
+    // Any observed change ripples to group tiles mirroring this light —
+    // regular polls included, so externally-caused changes propagate too.
+    if (after !== before && this.homey.app.scheduleGroupTileRefresh) {
+      this.homey.app.scheduleGroupTileRefresh();
+    }
     if (!this.getAvailable()) {
       await this.setAvailable().catch(this.error);
       // Recovery from unavailable often means the light rebooted (e.g. a

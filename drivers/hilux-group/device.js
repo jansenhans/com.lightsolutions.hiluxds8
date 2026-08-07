@@ -5,7 +5,7 @@ const ShellyRpcClient = require('../../lib/ShellyRpcClient');
 
 const CT_MIN = 2200;
 const CT_MAX = 6000;
-const POLL_INTERVAL_MS = 10000; // cheap: mirrors from Homey's own device cache
+const POLL_INTERVAL_MS = 30000; // backstop only — push events drive refreshes
 const COMMAND_COOLDOWN_MS = 5000; // skip mirror poll this long after a command
 const STAGGER_MS = 30; // gap between per-light commands in a broadcast
 const CAPABILITY_COMBINE_MS = 300;
@@ -51,6 +51,11 @@ class HiluxGroupDevice extends Homey.Device {
   async _members() {
     const zoneIds = this.getStoreValue('zoneIds') || [];
     return this.homey.app.resolveGroupAddresses(zoneIds);
+  }
+
+  // Called by the app when a member light's state changes (push/webhook)
+  refreshNow() {
+    return this._refresh().catch((err) => this.error('Refresh failed:', err.message));
   }
 
   async _onCapabilities(values) {

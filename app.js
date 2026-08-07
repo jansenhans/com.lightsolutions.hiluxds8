@@ -1,5 +1,6 @@
 'use strict';
 
+const http = require('http');
 const Homey = require('homey');
 const { HomeyAPI } = require('homey-api');
 
@@ -13,6 +14,9 @@ const NOTIFY_AFTER_CONSECUTIVE_FAILURES = 3; // ~15 min of real outage
 const NOTIFY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const LIGHT_DRIVER = 'hilux-ds8';
 const BUTTON_DRIVER = 'hilux-i4-button';
+const GROUP_DRIVER = 'hilux-group';
+const PUSH_PORT = 4820; // local HTTP receiver for light-state push
+const GROUP_REFRESH_DEBOUNCE_MS = 700; // lets a nudged poll land first
 
 function num(value, fallback) {
   return typeof value === 'number' && !Number.isNaN(value) ? value : fallback;
@@ -57,11 +61,56 @@ class HiluxDS8App extends Homey.App {
     this._api.devices.on('device.create', onDeviceEvent);
     this._api.devices.on('device.delete', onDeviceEvent);
 
+    // Push receiver: lights (webhooks) and i4 scripts (gesture pings) hit
+    // http://<homey>:4820/hilux-push/<light-ip> the moment state changes, so
+    // tiles follow in about a second instead of a poll cycle.
+    this._groupRefreshTimer = null;
+    this._pushServer = http.createServer((req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end('ok');
+      const m = /^\/hilux-push\/(\d+\.\d+\.\d+\.\d+)$/.exec((req.url || '').split('?')[0]);
+      if (m) this.lightStateTouched(m[1]);
+    });
+    this._pushServer.on('error', (err) => this.error('Push server error:', err.message));
+    this._pushServer.listen(PUSH_PORT, () => this.log(`Push receiver listening on :${PUSH_PORT}`));
+
     // First rebuild shortly after startup (lets drivers finish init), then a
     // periodic full verify (force) that also heals an i4 that was rebooted
     // or factory-reset behind our back.
     this.homey.setTimeout(() => this._rebuildAll('app start', true).catch((e) => this.error(e)), 15000);
     this.homey.setInterval(() => this._rebuildAll('periodic', true).catch((e) => this.error(e)), REBUILD_INTERVAL_MS);
+  }
+
+  async onUninit() {
+    if (this._pushServer) this._pushServer.close();
+  }
+
+  // Base URL for state-push callbacks, baked into webhooks and i4 scripts.
+  async getPushBaseUrl() {
+    const address = await this.homey.cloud.getLocalAddress();
+    return `http://${address.split(':')[0]}:${PUSH_PORT}/hilux-push/`;
+  }
+
+  // A light's state changed (webhook, i4 gesture ping, or a group broadcast):
+  // poll it right away and refresh group tiles once things settle.
+  lightStateTouched(address) {
+    const dev = this._lightDevicesByAddress().get(address);
+    if (dev && typeof dev.poll === 'function') dev.poll().catch(() => {});
+    this.scheduleGroupTileRefresh();
+  }
+
+  scheduleGroupTileRefresh() {
+    if (this._groupRefreshTimer) return;
+    this._groupRefreshTimer = this.homey.setTimeout(() => {
+      this._groupRefreshTimer = null;
+      try {
+        for (const group of this.homey.drivers.getDriver(GROUP_DRIVER).getDevices()) {
+          if (typeof group.refreshNow === 'function') group.refreshNow();
+        }
+      } catch (err) {
+        this.error('Group tile refresh failed:', err.message);
+      }
+    }, GROUP_REFRESH_DEBOUNCE_MS);
   }
 
   // --- virtual light groups (driver hilux-group) ---------------------------
@@ -218,8 +267,10 @@ class HiluxDS8App extends Homey.App {
       };
     }
 
+    const pushBaseUrl = await this.getPushBaseUrl().catch(() => null);
+
     for (const [address, configs] of perI4) {
-      const { code, hash } = ScriptBuilder.generate(configs);
+      const { code, hash } = ScriptBuilder.generate(configs, pushBaseUrl);
       // Device events fire often (renames, capability chatter) — only talk
       // to the i4 when the config actually changed. Periodic runs force a
       // full on-device verify.
