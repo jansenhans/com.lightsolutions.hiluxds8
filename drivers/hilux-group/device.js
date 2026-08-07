@@ -44,8 +44,8 @@ class HiluxGroupDevice extends Homey.Device {
     );
 
     await this._refresh().catch((err) => this.error('Initial refresh failed:', err.message));
+    // Backstop only; the in-flight-command guard lives inside _refresh itself
     this._pollInterval = this.homey.setInterval(() => {
-      if (Date.now() - this._lastCommandAt < COMMAND_COOLDOWN_MS) return;
       this._refresh().catch((err) => this.error('Refresh failed:', err.message));
     }, POLL_INTERVAL_MS);
   }
@@ -79,6 +79,13 @@ class HiluxGroupDevice extends Homey.Device {
 
     const fade = this.getSetting('fade_s');
     if (typeof fade === 'number' && fade > 0) params.transitionDuration = fade;
+
+    // Optimistic UI: reflect the command immediately (Homey does not set
+    // capability values automatically for combined listeners)
+    if (typeof params.on === 'boolean') await this.setCapabilityValue('onoff', params.on).catch(this.error);
+    if ('dim' in values) await this.setCapabilityValue('dim', values.dim).catch(this.error);
+    if ('light_temperature' in values)
+      await this.setCapabilityValue('light_temperature', values.light_temperature).catch(this.error);
 
     await this._broadcast(params);
   }
@@ -115,6 +122,17 @@ class HiluxGroupDevice extends Homey.Device {
     const fadeMs = (typeof params.transitionDuration === 'number' ? params.transitionDuration : 0) * 1000;
     this._suppressMirrorUntil = Date.now() + fadeMs + 1500;
     this.homey.setTimeout(() => this.homey.app.pollLights(addresses), fadeMs + 800);
+
+    // Optimistic counter for on/off commands
+    if (typeof params.on === 'boolean') {
+      await this.setCapabilityValue('measure_lights_on', params.on ? addresses.length : 0)
+        .catch(this.error);
+    }
+
+    // Guaranteed reconciliation AFTER the suppression window closes — a
+    // refresh triggered by push events can land a hair inside the window and
+    // be swallowed, which froze tiles until the next unrelated event.
+    this.homey.setTimeout(() => this.refreshNow(), fadeMs + 1700);
   }
 
   // Mirror member state onto the tile (from the members' own Homey devices —
