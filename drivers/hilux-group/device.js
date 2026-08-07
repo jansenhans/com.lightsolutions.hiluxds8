@@ -5,15 +5,10 @@ const ShellyRpcClient = require('../../lib/ShellyRpcClient');
 
 const CT_MIN = 2200;
 const CT_MAX = 6000;
-const POLL_INTERVAL_MS = 20000;
+const POLL_INTERVAL_MS = 10000; // cheap: mirrors from Homey's own device cache
 const COMMAND_COOLDOWN_MS = 5000; // skip mirror poll this long after a command
 const STAGGER_MS = 30; // gap between per-light commands in a broadcast
 const CAPABILITY_COMBINE_MS = 300;
-
-function ctToHomeyTemperature(ct) {
-  const clamped = Math.min(CT_MAX, Math.max(CT_MIN, ct));
-  return (CT_MAX - clamped) / (CT_MAX - CT_MIN);
-}
 
 function homeyTemperatureToCt(temperature) {
   const clamped = Math.min(1, Math.max(0, temperature));
@@ -99,36 +94,32 @@ class HiluxGroupDevice extends Homey.Device {
     if (reached === 0) throw new Error('No lights in this group were reachable');
   }
 
-  // Mirror the reference light's state onto the tile, and keep the zones
-  // label + availability in sync with current membership.
+  // Mirror member state onto the tile (from the members' own Homey devices —
+  // no extra RPC), and keep the zones label + availability in sync.
+  // The tile is ON if ANY member is on, OFF only when all are off; brightness
+  // and colour mirror the first light that is actually on.
   async _refresh() {
-    const { addresses, zoneNames } = await this._members();
+    const { members, zoneNames } = await this._members();
 
     const label = zoneNames.join(', ') || '(none)';
     if (this.getSetting('zones_label') !== label) {
       await this.setSettings({ zones_label: label }).catch(() => {});
     }
 
-    if (addresses.length === 0) {
+    if (members.length === 0) {
       await this.setUnavailable('No HiluX lights in the selected zones').catch(this.error);
       return;
     }
     if (!this.getAvailable()) await this.setAvailable().catch(this.error);
 
-    let status;
-    try {
-      status = await new ShellyRpcClient(addresses[0]).getCctStatus(0);
-    } catch (err) {
-      // Reference unreachable — the group can still command the others,
-      // so stay available and just skip this mirror cycle.
-      return;
-    }
-    if (typeof status.output === 'boolean')
-      await this.setCapabilityValue('onoff', status.output).catch(this.error);
-    if (typeof status.brightness === 'number')
-      await this.setCapabilityValue('dim', status.brightness / 100).catch(this.error);
-    if (typeof status.ct === 'number')
-      await this.setCapabilityValue('light_temperature', ctToHomeyTemperature(status.ct)).catch(this.error);
+    const anyOn = members.some((m) => m.onoff === true);
+    await this.setCapabilityValue('onoff', anyOn).catch(this.error);
+
+    const ref = members.find((m) => m.onoff === true) || members[0];
+    if (typeof ref.dim === 'number')
+      await this.setCapabilityValue('dim', ref.dim).catch(this.error);
+    if (typeof ref.temperature === 'number')
+      await this.setCapabilityValue('light_temperature', ref.temperature).catch(this.error);
   }
 }
 

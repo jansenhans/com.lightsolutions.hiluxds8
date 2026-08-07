@@ -91,17 +91,26 @@ class HiluxDS8App extends Homey.App {
 
     const appPrefix = `homey:app:${this.homey.manifest.id}:`;
     const all = Object.values(await this._api.devices.getDevices());
-    const addresses = all
+    const cap = (d, id) => (d.capabilitiesObj && d.capabilitiesObj[id]
+      ? d.capabilitiesObj[id].value : null);
+    const members = all
       .filter((d) => d.driverId === appPrefix + LIGHT_DRIVER
         && selected.has(d.zone)
         && d.settings && d.settings.address)
-      .map((d) => d.settings.address);
+      .map((d) => ({
+        address: d.settings.address,
+        onoff: cap(d, 'onoff'),
+        dim: cap(d, 'dim'),
+        temperature: cap(d, 'light_temperature'),
+      }));
+    const order = sortAddresses(members.map((m) => m.address));
+    members.sort((a, b) => order.indexOf(a.address) - order.indexOf(b.address));
 
     const zoneNames = zoneIds
       .map((id) => { const z = zones.find((x) => x.id === id); return z ? z.name : null; })
       .filter(Boolean);
 
-    return { addresses: sortAddresses(addresses), zoneNames };
+    return { addresses: order, members, zoneNames };
   }
 
   // Called by button devices on init/settings/delete. Debounced: pairing an
