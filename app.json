@@ -1,6 +1,6 @@
 {
   "id": "com.lightsolutions.hiluxds8",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "compatibility": ">=5.0.0",
   "sdk": 3,
   "platforms": [
@@ -460,7 +460,8 @@
       "capabilities": [
         "onoff",
         "dim",
-        "light_temperature"
+        "light_temperature",
+        "lights_on_count"
       ],
       "platforms": [
         "local"
@@ -515,5 +516,19 @@
         }
       ]
     }
-  ]
+  ],
+  "capabilities": {
+    "lights_on_count": {
+      "type": "number",
+      "title": {
+        "en": "Lights on"
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": "sensor",
+      "insights": false,
+      "min": 0,
+      "step": 1
+    }
+  }
 }

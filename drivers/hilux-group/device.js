@@ -27,6 +27,11 @@ class HiluxGroupDevice extends Homey.Device {
 
     this._lastCommandAt = 0;
 
+    // Devices paired before the counter capability existed get it on the fly
+    if (!this.hasCapability('lights_on_count')) {
+      await this.addCapability('lights_on_count').catch(this.error);
+    }
+
     this.registerMultipleCapabilityListener(
       ['onoff', 'dim', 'light_temperature'],
       (values) => this._onCapabilities(values),
@@ -129,8 +134,18 @@ class HiluxGroupDevice extends Homey.Device {
     }
     if (!this.getAvailable()) await this.setAvailable().catch(this.error);
 
-    const anyOn = members.some((m) => m.onoff === true);
+    const onCount = members.filter((m) => m.onoff === true).length;
+    const anyOn = onCount > 0;
     await this.setCapabilityValue('onoff', anyOn).catch(this.error);
+
+    // "3 / 5" on the tile: value = lights on, unit = "/ total" (kept current
+    // as membership changes)
+    await this.setCapabilityValue('lights_on_count', onCount).catch(this.error);
+    if (this._lastTotal !== members.length) {
+      this._lastTotal = members.length;
+      await this.setCapabilityOptions('lights_on_count', { units: `/ ${members.length}` })
+        .catch(this.error);
+    }
 
     const ref = members.find((m) => m.onoff === true) || members[0];
     if (typeof ref.dim === 'number')
