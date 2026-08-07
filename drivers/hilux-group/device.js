@@ -27,9 +27,14 @@ class HiluxGroupDevice extends Homey.Device {
 
     this._lastCommandAt = 0;
 
-    // Devices paired before the counter capability existed get it on the fly
-    if (!this.hasCapability('lights_on_count')) {
-      await this.addCapability('lights_on_count').catch(this.error);
+    // Migrate/ensure the counter capability (must be measure_-prefixed —
+    // Homey only offers measure_/meter_/alarm_ capabilities as tile status
+    // indicators)
+    if (this.hasCapability('lights_on_count')) {
+      await this.removeCapability('lights_on_count').catch(this.error);
+    }
+    if (!this.hasCapability('measure_lights_on')) {
+      await this.addCapability('measure_lights_on').catch(this.error);
     }
 
     this.registerMultipleCapabilityListener(
@@ -140,10 +145,10 @@ class HiluxGroupDevice extends Homey.Device {
 
     // "3 / 5" on the tile: value = lights on, unit = "/ total" (kept current
     // as membership changes)
-    await this.setCapabilityValue('lights_on_count', onCount).catch(this.error);
+    await this.setCapabilityValue('measure_lights_on', onCount).catch(this.error);
     if (this._lastTotal !== members.length) {
       this._lastTotal = members.length;
-      await this.setCapabilityOptions('lights_on_count', { units: `/ ${members.length}` })
+      await this.setCapabilityOptions('measure_lights_on', { units: `/ ${members.length}` })
         .catch(this.error);
     }
 
