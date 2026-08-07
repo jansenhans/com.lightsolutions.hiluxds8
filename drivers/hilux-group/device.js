@@ -98,9 +98,12 @@ class HiluxGroupDevice extends Homey.Device {
     this.log(`Broadcast ${JSON.stringify(params)} → ${reached}/${addresses.length} lights`);
     if (reached === 0) throw new Error('No lights in this group were reachable');
 
-    // Once the fade has landed, have the member lights re-poll so their Homey
-    // state — and every other group tile mirroring them — follows promptly.
+    // During the fade the lights still report their old on/off state, so a
+    // mirror refresh mid-fade would flip this tile back (visible as off→on→off
+    // when switching a group off). Suppress mirroring until the fade has
+    // landed, then have the member lights re-poll so every tile follows.
     const fadeMs = (typeof params.transitionDuration === 'number' ? params.transitionDuration : 0) * 1000;
+    this._suppressMirrorUntil = Date.now() + fadeMs + 1500;
     this.homey.setTimeout(() => this.homey.app.pollLights(addresses), fadeMs + 800);
   }
 
@@ -109,6 +112,10 @@ class HiluxGroupDevice extends Homey.Device {
   // The tile is ON if ANY member is on, OFF only when all are off; brightness
   // and colour mirror the first light that is actually on.
   async _refresh() {
+    // Own broadcast still in flight — trust the optimistic tile state until
+    // the lights have finished fading and report reality.
+    if (Date.now() < (this._suppressMirrorUntil || 0)) return;
+
     const { members, zoneNames } = await this._members();
 
     const label = zoneNames.join(', ') || '(none)';
