@@ -27,9 +27,8 @@ class HiluxGroupDevice extends Homey.Device {
 
     this._lastCommandAt = 0;
 
-    // Migrate/ensure the counter capability (must be measure_-prefixed —
-    // Homey only offers measure_/meter_/alarm_ capabilities as tile status
-    // indicators)
+    // Migrate/ensure the counter capability (measure_-prefixed so Homey can
+    // offer it as a tile status indicator, should light tiles ever honor it)
     if (this.hasCapability('lights_on_count')) {
       await this.removeCapability('lights_on_count').catch(this.error);
     }
@@ -124,7 +123,7 @@ class HiluxGroupDevice extends Homey.Device {
     this.homey.setTimeout(() => this.homey.app.pollLights(addresses), fadeMs + 800);
 
     // Optimistic counter for on/off commands
-    if (typeof params.on === 'boolean') {
+    if (typeof params.on === 'boolean' && this.hasCapability('measure_lights_on')) {
       await this.setCapabilityValue('measure_lights_on', params.on ? addresses.length : 0)
         .catch(this.error);
     }
@@ -161,8 +160,9 @@ class HiluxGroupDevice extends Homey.Device {
     const anyOn = onCount > 0;
     await this.setCapabilityValue('onoff', anyOn).catch(this.error);
 
-    // "3 / 5" on the tile: value = lights on, unit = "/ total" (kept current
-    // as membership changes)
+    // "3 / 5" counter: value = lights on, unit = "/ total" (kept current as
+    // membership changes). Shown in the device view; light tiles don't
+    // render custom indicators.
     await this.setCapabilityValue('measure_lights_on', onCount).catch(this.error);
     if (this._lastTotal !== members.length) {
       this._lastTotal = members.length;

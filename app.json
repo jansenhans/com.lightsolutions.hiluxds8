@@ -1,6 +1,6 @@
 {
   "id": "com.lightsolutions.hiluxds8",
-  "version": "2.2.4",
+  "version": "2.2.7",
   "compatibility": ">=5.0.0",
   "sdk": 3,
   "platforms": [
@@ -526,7 +526,12 @@
       "getable": true,
       "setable": false,
       "uiComponent": "sensor",
+      "icon": "/assets/icon.svg",
       "insights": false,
+      "units": {
+        "en": ""
+      },
+      "decimals": 0,
       "min": 0,
       "step": 1
     }
