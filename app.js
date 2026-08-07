@@ -91,18 +91,23 @@ class HiluxDS8App extends Homey.App {
 
     const appPrefix = `homey:app:${this.homey.manifest.id}:`;
     const all = Object.values(await this._api.devices.getDevices());
-    const cap = (d, id) => (d.capabilitiesObj && d.capabilitiesObj[id]
-      ? d.capabilitiesObj[id].value : null);
+    // Capability values must come from our own live device instances — the
+    // Web API device cache only tracks properties (zone, settings), not
+    // capability values, so reading those from it serves frozen state.
+    const liveByAddress = this._lightDevicesByAddress();
     const members = all
       .filter((d) => d.driverId === appPrefix + LIGHT_DRIVER
         && selected.has(d.zone)
         && d.settings && d.settings.address)
-      .map((d) => ({
-        address: d.settings.address,
-        onoff: cap(d, 'onoff'),
-        dim: cap(d, 'dim'),
-        temperature: cap(d, 'light_temperature'),
-      }));
+      .map((d) => {
+        const live = liveByAddress.get(d.settings.address);
+        return {
+          address: d.settings.address,
+          onoff: live ? live.getCapabilityValue('onoff') : null,
+          dim: live ? live.getCapabilityValue('dim') : null,
+          temperature: live ? live.getCapabilityValue('light_temperature') : null,
+        };
+      });
     const order = sortAddresses(members.map((m) => m.address));
     members.sort((a, b) => order.indexOf(a.address) - order.indexOf(b.address));
 
@@ -111,6 +116,31 @@ class HiluxDS8App extends Homey.App {
       .filter(Boolean);
 
     return { addresses: order, members, zoneNames };
+  }
+
+  _lightDevicesByAddress() {
+    const map = new Map();
+    try {
+      for (const dev of this.homey.drivers.getDriver(LIGHT_DRIVER).getDevices()) {
+        const addr = dev.getSetting('address') || dev.getStoreValue('address');
+        if (addr) map.set(addr, dev);
+      }
+    } catch (err) {
+      this.error('Light device lookup failed:', err.message);
+    }
+    return map;
+  }
+
+  // After a group broadcast, member lights are told to re-poll so their
+  // Homey state (and every group tile mirroring them) syncs promptly.
+  pollLights(addresses) {
+    const live = this._lightDevicesByAddress();
+    for (const address of addresses) {
+      const dev = live.get(address);
+      if (dev && typeof dev.poll === 'function') {
+        dev.poll().catch(() => {});
+      }
+    }
   }
 
   // Called by button devices on init/settings/delete. Debounced: pairing an

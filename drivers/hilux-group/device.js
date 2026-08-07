@@ -92,6 +92,11 @@ class HiluxGroupDevice extends Homey.Device {
     const reached = results.filter(Boolean).length;
     this.log(`Broadcast ${JSON.stringify(params)} → ${reached}/${addresses.length} lights`);
     if (reached === 0) throw new Error('No lights in this group were reachable');
+
+    // Once the fade has landed, have the member lights re-poll so their Homey
+    // state — and every other group tile mirroring them — follows promptly.
+    const fadeMs = (typeof params.transitionDuration === 'number' ? params.transitionDuration : 0) * 1000;
+    this.homey.setTimeout(() => this.homey.app.pollLights(addresses), fadeMs + 800);
   }
 
   // Mirror member state onto the tile (from the members' own Homey devices —
