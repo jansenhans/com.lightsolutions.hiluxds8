@@ -27,7 +27,10 @@ without any cloud or hub round-trip.
 - The app generates a script per i4 and deploys it over the LAN
   automatically — on pairing, on settings changes, and within seconds of
   zone changes (realtime device events; a periodic sweep also heals an i4
-  that was factory-reset). You never edit a script by hand.
+  that was factory-reset). The periodic sweep reads zones fresh from the
+  Homey API rather than the realtime cache, so it self-heals even if the
+  realtime connection silently breaks (e.g. after network outages).
+  You never edit a script by hand.
 - Button gestures (all local, i4 → lights directly):
 
   | Press        | Action                                                      |

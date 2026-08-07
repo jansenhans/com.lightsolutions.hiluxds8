@@ -79,7 +79,11 @@ class HiluxDS8App extends Homey.App {
   }
 
   async _doRebuild(reason, force = false) {
-    const all = Object.values(await this._api.devices.getDevices());
+    // Forced runs bypass the realtime cache: homey-api never re-syncs it after
+    // a socket reconnect, so zone moves that happen while the subscription is
+    // down (or wedged) would otherwise stay invisible forever. Fetching fresh
+    // also repairs the cache for the realtime path.
+    const all = Object.values(await this._api.devices.getDevices(force ? { $cache: false } : undefined));
     const appPrefix = `homey:app:${this.homey.manifest.id}:`;
 
     const lights = all.filter((d) => d.driverId === appPrefix + LIGHT_DRIVER);
