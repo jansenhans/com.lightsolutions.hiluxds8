@@ -2,95 +2,88 @@
   .hg-wrap { padding: 0 1em 1em; font-size: 15px; }
   .hg-name { width: 100%; box-sizing: border-box; padding: .55em .7em; margin-bottom: 1em;
              border: 1px solid #ccc; border-radius: 8px; font-size: 15px; }
-  .hg-list { max-height: 46vh; overflow-y: auto; border: 1px solid #eee; border-radius: 8px; }
+  .hg-list { max-height: 42vh; overflow-y: auto; border: 1px solid #eee; border-radius: 8px; }
   .hg-zone { display: flex; align-items: center; padding: .45em .7em; border-bottom: 1px solid #f2f2f2; }
   .hg-zone:last-child { border-bottom: none; }
   .hg-zone input { margin-right: .6em; transform: scale(1.15); }
-  .hg-sub { color: #999; font-size: 12px; margin-left: .4em; }
   .hg-hint { color: #888; font-size: 13px; margin: .8em 0; }
-  .hg-btn { width: 100%; padding: .7em; margin-top: .6em; border: none; border-radius: 10px;
+  .hg-error { color: #c0392b; font-size: 13px; margin: .6em 0; min-height: 1.2em; }
+  .hg-btn { width: 100%; padding: .7em; margin-top: .4em; border: none; border-radius: 10px;
             background: #06f; color: #fff; font-size: 16px; cursor: pointer; }
   .hg-btn:disabled { background: #bbb; cursor: default; }
 </style>
 
 <div class="hg-wrap">
   <input id="hg-name" class="hg-name" type="text" placeholder="Group name (e.g. First Floor)" />
-  <div id="hg-list" class="hg-list"></div>
+  <div id="hg-list" class="hg-list">Loading zones…</div>
   <div class="hg-hint">Each selected zone includes its sub-zones. Lights that move
     between zones follow automatically.</div>
-  <button id="hg-create" class="hg-btn" disabled>Create group</button>
+  <div id="hg-error" class="hg-error"></div>
+  <button id="hg-continue" class="hg-btn">Continue</button>
 </div>
 
-<script type="application/javascript">
-  Homey.setTitle(Homey.__({ en: 'New light group' }));
+<script>
+  Homey.setTitle('New light group');
 
   var listEl = document.getElementById('hg-list');
   var nameEl = document.getElementById('hg-name');
-  var btnEl = document.getElementById('hg-create');
+  var btnEl = document.getElementById('hg-continue');
+  var errEl = document.getElementById('hg-error');
 
-  function depthOf(zone, byId) {
-    var d = 0; var p = zone.parent;
-    while (p && byId[p]) { d += 1; p = byId[p].parent; }
-    return d;
-  }
+  Homey.emit('get_zones', {})
+    .then(function (zones) {
+      listEl.innerHTML = '';
+      var byId = {};
+      zones.forEach(function (z) { byId[z.id] = z; });
 
-  function updateButton() {
-    var any = listEl.querySelectorAll('input:checked').length > 0;
-    btnEl.disabled = !(any && nameEl.value.trim().length > 0);
-  }
-
-  Homey.emit('get_zones').then(function (zones) {
-    var byId = {};
-    zones.forEach(function (z) { byId[z.id] = z; });
-
-    // Depth-first render so children sit under their parents
-    function children(pid) {
-      return zones.filter(function (z) { return (z.parent || null) === pid; })
-        .sort(function (a, b) { return a.name.localeCompare(b.name); });
-    }
-    function render(zone) {
-      var depth = depthOf(zone, byId);
-      var row = document.createElement('label');
-      row.className = 'hg-zone';
-      row.style.paddingLeft = (0.7 + depth * 1.2) + 'em';
-      var cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.value = zone.id;
-      cb.addEventListener('change', updateButton);
-      row.appendChild(cb);
-      row.appendChild(document.createTextNode(zone.name));
-      if (depth > 0) {
-        var sub = document.createElement('span');
-        sub.className = 'hg-sub';
-        sub.textContent = '· ' + (byId[zone.parent] ? byId[zone.parent].name : '');
-        row.appendChild(sub);
+      function depthOf(zone) {
+        var d = 0; var p = zone.parent;
+        while (p && byId[p]) { d += 1; p = byId[p].parent; }
+        return d;
       }
-      listEl.appendChild(row);
-      children(zone.id).forEach(render);
-    }
-    children(null).forEach(render);
-  }).catch(function (err) {
-    Homey.alert(String(err));
-  });
-
-  nameEl.addEventListener('input', updateButton);
+      function children(pid) {
+        return zones.filter(function (z) { return (z.parent || null) === pid; })
+          .sort(function (a, b) { return a.name.localeCompare(b.name); });
+      }
+      function render(zone) {
+        var row = document.createElement('label');
+        row.className = 'hg-zone';
+        row.style.paddingLeft = (0.7 + depthOf(zone) * 1.2) + 'em';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = zone.id;
+        row.appendChild(cb);
+        row.appendChild(document.createTextNode(zone.name));
+        listEl.appendChild(row);
+        children(zone.id).forEach(render);
+      }
+      children(null).forEach(render);
+    })
+    .catch(function (err) {
+      errEl.textContent = 'Could not load zones: ' + String(err && err.message || err);
+    });
 
   btnEl.addEventListener('click', function () {
+    errEl.textContent = '';
     var zoneIds = Array.prototype.map.call(
       listEl.querySelectorAll('input:checked'),
       function (cb) { return cb.value; }
     );
+    var name = nameEl.value.trim();
+    if (!name) { errEl.textContent = 'Give the group a name.'; return; }
+    if (zoneIds.length === 0) { errEl.textContent = 'Tick at least one zone.'; return; }
+
     btnEl.disabled = true;
-    Homey.createDevice({
-      name: nameEl.value.trim(),
-      data: { id: 'hilux-group-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8) },
-      store: { zoneIds: zoneIds },
-      settings: {},
-    }).then(function () {
-      Homey.done();
-    }).catch(function (err) {
-      btnEl.disabled = false;
-      Homey.alert(String(err));
-    });
+    Homey.emit('zones_selected', { name: name, zoneIds: zoneIds })
+      .then(function (result) {
+        if (result && result.lights === 0) {
+          errEl.textContent = 'Note: no HiluX lights in these zones yet — the group will activate once there are.';
+        }
+        Homey.nextView();
+      })
+      .catch(function (err) {
+        btnEl.disabled = false;
+        errEl.textContent = String(err && err.message || err);
+      });
   });
 </script>
