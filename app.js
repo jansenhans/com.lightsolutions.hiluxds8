@@ -245,11 +245,14 @@ class HiluxDS8App extends Homey.App {
         }
         const expected = `HiLux ${zone} (${String(seq).padStart(2, '0')})`;
         if (d.name !== expected) {
+          // d is a live cache object — its name mutates once the rename event
+          // comes back, so keep the old name for logging
+          const prevName = d.name;
           try {
             await this._renameDevice(d.id, expected);
-            this.log(`Renamed light: "${d.name}" → "${expected}"`);
+            this.log(`Renamed light: "${prevName}" → "${expected}"`);
           } catch (err) {
-            this.error(`Rename of "${d.name}" failed:`, err.message);
+            this.error(`Rename of "${prevName}" failed:`, err.message);
           }
         }
       }
