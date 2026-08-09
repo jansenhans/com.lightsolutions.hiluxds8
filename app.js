@@ -43,6 +43,16 @@ class HiluxDS8App extends Homey.App {
     this._notifiedEmptyZones = new Set();
 
     this._api = await HomeyAPI.createAppAPI({ homey: this.homey });
+
+    // Renaming needs the API key from the app settings (see _renameDevice);
+    // re-run the sweep as soon as the user pastes one
+    this._renameKeyWarned = false;
+    this.homey.settings.on('set', (key) => {
+      if (key === 'api_key') {
+        this._renameKeyWarned = false;
+        this.scheduleRebuild('api key updated');
+      }
+    });
     this._deployedHashes = new Map(); // i4 address -> last deployed config hash
     this._deployFailures = new Map(); // i4 address -> consecutive failure count
     this._failureNotifiedAt = new Map(); // i4 address -> last notification ts
@@ -236,7 +246,7 @@ class HiluxDS8App extends Homey.App {
         const expected = `HiLux ${zone} (${String(seq).padStart(2, '0')})`;
         if (d.name !== expected) {
           try {
-            await this._api.devices.updateDevice({ id: d.id, device: { name: expected } });
+            await this._renameDevice(d.id, expected);
             this.log(`Renamed light: "${d.name}" → "${expected}"`);
           } catch (err) {
             this.error(`Rename of "${d.name}" failed:`, err.message);
@@ -244,6 +254,32 @@ class HiluxDS8App extends Homey.App {
         }
       }
     }
+  }
+
+  // Rename a device through the local Web API. The app's own API session
+  // only gets homey.device.readonly/control — renaming needs the full
+  // homey.device scope, which Homey never grants to apps. So we use a
+  // user-created API key (Homey Settings → API Keys, Devices: full access)
+  // stored in the app settings.
+  async _renameDevice(id, name) {
+    const key = this.homey.settings.get('api_key');
+    if (!key) {
+      if (!this._renameKeyWarned) {
+        this._renameKeyWarned = true;
+        this.log('Cannot rename lights: no API key configured in app settings');
+        await this.homey.notifications.createNotification({
+          excerpt: 'HiluX: automatic light naming needs a Homey API key. Create one in Homey Settings → API Keys (Devices: full access) and paste it in the HiluX DS8 app settings.',
+        }).catch(() => {});
+      }
+      throw new Error('no API key configured');
+    }
+    const baseUrl = await this.homey.api.getLocalUrl();
+    const res = await fetch(new URL(`/api/manager/devices/device/${id}`, baseUrl), {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
   }
 
   _lightDevicesByAddress() {

@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+<head>
+  <script type="text/javascript" src="/homey.js" data-origin="settings"></script>
+</head>
+<body>
+  <header class="homey-header">
+    <h1 class="homey-title">HiluX DS8</h1>
+    <p class="homey-subtitle">Automatic light naming</p>
+  </header>
+
+  <fieldset class="homey-form-fieldset">
+    <legend class="homey-form-legend">Homey API key</legend>
+    <div class="homey-form-group">
+      <label class="homey-form-label" for="api_key">API key</label>
+      <input class="homey-form-input" id="api_key" type="password" autocomplete="off" />
+      <p class="homey-form-help">
+        Needed to rename lights automatically (apps cannot rename devices on
+        their own). Create a key via Homey Settings &rarr; API Keys with full
+        access to Devices, and paste it here.
+      </p>
+    </div>
+  </fieldset>
+
+  <button id="save" class="homey-button-primary-full">Save</button>
+
+  <script>
+    function onHomeyReady(Homey) {
+      var el = document.getElementById('api_key');
+      Homey.get('api_key', function (err, val) {
+        if (!err && val) el.value = val;
+      });
+      document.getElementById('save').addEventListener('click', function () {
+        Homey.set('api_key', el.value.trim(), function (err) {
+          if (err) return Homey.alert(err);
+          Homey.alert('Saved. Lights will be renamed within a few seconds.');
+        });
+      });
+      Homey.ready();
+    }
+  </script>
+</body>
+</html>
