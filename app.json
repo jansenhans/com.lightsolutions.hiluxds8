@@ -1,6 +1,6 @@
 {
   "id": "com.lightsolutions.hiluxds8",
-  "version": "2.2.7",
+  "version": "2.3.0",
   "compatibility": ">=5.0.0",
   "sdk": 3,
   "platforms": [
@@ -230,6 +230,17 @@
           "type": "text",
           "label": {
             "en": "IP Address"
+          },
+          "value": ""
+        },
+        {
+          "id": "unit_label",
+          "type": "text",
+          "label": {
+            "en": "Unit label"
+          },
+          "hint": {
+            "en": "Inventory number used in the auto-generated name (HiluX <unit> · <room>), e.g. “2-03”. The app renames the light automatically when it moves to another room. Rename the light to anything not starting with “HiluX” to opt out of automatic naming."
           },
           "value": ""
         },

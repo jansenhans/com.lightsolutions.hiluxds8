@@ -167,6 +167,42 @@ class HiluxDS8App extends Homey.App {
     return { addresses: order, members, zoneNames };
   }
 
+  // Auto-rename lights to "HiluX <unit> · <room>" so names follow zone moves.
+  // The unit label (e.g. "2-03") lives in the device's settings, auto-extracted
+  // from the legacy name once. Names not starting with "HiluX" are considered
+  // customized by the user and are never touched.
+  async _syncLightNames(lights, force = false) {
+    const zones = await this._api.zones.getZones(force ? { $cache: false } : undefined);
+    const zoneName = (id) => (zones[id] ? zones[id].name : null);
+    const live = this._lightDevicesByAddress();
+
+    for (const d of lights) {
+      if (!d.name || !d.name.startsWith('HiluX')) continue;
+      if (!d.settings || !d.settings.address) continue;
+      const dev = live.get(d.settings.address);
+
+      let unit = dev && dev.getSetting('unit_label');
+      if (!unit) {
+        const m = /(\d+-\d+)/.exec(d.name);
+        if (!m) continue; // no unit known and none derivable — leave alone
+        unit = m[1];
+        if (dev) await dev.setSettings({ unit_label: unit }).catch(() => {});
+      }
+
+      const zone = zoneName(d.zone);
+      if (!zone) continue;
+      const expected = `HiluX ${unit} · ${zone}`;
+      if (d.name !== expected) {
+        try {
+          await this._api.devices.updateDevice({ id: d.id, device: { name: expected } });
+          this.log(`Renamed light: "${d.name}" → "${expected}"`);
+        } catch (err) {
+          this.error(`Rename of "${d.name}" failed:`, err.message);
+        }
+      }
+    }
+  }
+
   _lightDevicesByAddress() {
     const map = new Map();
     try {
@@ -226,6 +262,11 @@ class HiluxDS8App extends Homey.App {
     const appPrefix = `homey:app:${this.homey.manifest.id}:`;
 
     const lights = all.filter((d) => d.driverId === appPrefix + LIGHT_DRIVER);
+
+    // Keep light names in sync with their room (same triggers as the button
+    // scripts: instant on zone moves, healed by the periodic sweep)
+    await this._syncLightNames(lights, force).catch((err) => this.error('Name sync failed:', err.message));
+
     const buttons = all.filter((d) => d.driverId === appPrefix + BUTTON_DRIVER);
     if (buttons.length === 0) return;
 
