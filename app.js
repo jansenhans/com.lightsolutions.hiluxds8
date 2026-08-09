@@ -167,7 +167,8 @@ class HiluxDS8App extends Homey.App {
     return { addresses: order, members, zoneNames };
   }
 
-  // Auto-rename lights to "HiLux <room> (<unit>)" so names follow zone moves.
+  // Auto-rename lights to "HiLux <room> (<nr>)" so names follow zone moves,
+  // where <nr> is the unit label without its group prefix ("2-03" → "03").
   // The unit label (e.g. "2-03") lives in the device's settings, auto-extracted
   // from the legacy name once. Names not starting with "HiLux" (any casing,
   // so pre-2.3.1 "HiluX" names migrate too) are considered customized by the
@@ -184,7 +185,7 @@ class HiluxDS8App extends Homey.App {
 
       let unit = dev && dev.getSetting('unit_label');
       if (!unit) {
-        const m = /(\d+-\d+)/.exec(d.name);
+        const m = /(\d+-\d+)/.exec(d.name) || /\((\d+)\)/.exec(d.name);
         if (!m) continue; // no unit known and none derivable — leave alone
         unit = m[1];
         if (dev) await dev.setSettings({ unit_label: unit }).catch(() => {});
@@ -192,7 +193,10 @@ class HiluxDS8App extends Homey.App {
 
       const zone = zoneName(d.zone);
       if (!zone) continue;
-      const expected = `HiLux ${zone} (${unit})`;
+      // Full unit ("2-03") stays in settings; the name shows only the part
+      // after the dash
+      const shortUnit = unit.includes('-') ? unit.split('-').pop() : unit;
+      const expected = `HiLux ${zone} (${shortUnit})`;
       if (d.name !== expected) {
         try {
           await this._api.devices.updateDevice({ id: d.id, device: { name: expected } });
