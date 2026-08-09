@@ -167,17 +167,18 @@ class HiluxDS8App extends Homey.App {
     return { addresses: order, members, zoneNames };
   }
 
-  // Auto-rename lights to "HiluX <unit> · <room>" so names follow zone moves.
+  // Auto-rename lights to "HiLux <room> (<unit>)" so names follow zone moves.
   // The unit label (e.g. "2-03") lives in the device's settings, auto-extracted
-  // from the legacy name once. Names not starting with "HiluX" are considered
-  // customized by the user and are never touched.
+  // from the legacy name once. Names not starting with "HiLux" (any casing,
+  // so pre-2.3.1 "HiluX" names migrate too) are considered customized by the
+  // user and are never touched.
   async _syncLightNames(lights, force = false) {
     const zones = await this._api.zones.getZones(force ? { $cache: false } : undefined);
     const zoneName = (id) => (zones[id] ? zones[id].name : null);
     const live = this._lightDevicesByAddress();
 
     for (const d of lights) {
-      if (!d.name || !d.name.startsWith('HiluX')) continue;
+      if (!d.name || !/^hilux/i.test(d.name)) continue;
       if (!d.settings || !d.settings.address) continue;
       const dev = live.get(d.settings.address);
 
@@ -191,7 +192,7 @@ class HiluxDS8App extends Homey.App {
 
       const zone = zoneName(d.zone);
       if (!zone) continue;
-      const expected = `HiluX ${unit} · ${zone}`;
+      const expected = `HiLux ${zone} (${unit})`;
       if (d.name !== expected) {
         try {
           await this._api.devices.updateDevice({ id: d.id, device: { name: expected } });
