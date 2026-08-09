@@ -167,42 +167,80 @@ class HiluxDS8App extends Homey.App {
     return { addresses: order, members, zoneNames };
   }
 
-  // Auto-rename lights to "HiLux <room> (<nr>)" so names follow zone moves,
-  // where <nr> is the unit label without its group prefix ("2-03" → "03").
-  // The unit label (e.g. "2-03") lives in the device's settings, auto-extracted
-  // from the legacy name once. Names not starting with "HiLux" (any casing,
-  // so pre-2.3.1 "HiluX" names migrate too) are considered customized by the
-  // user and are never touched.
+  // Auto-rename lights to "HiLux <room> (<nr>)" so names follow zone moves.
+  // <nr> is a per-room sequence (01, 02, ...): a light keeps its number while
+  // it stays in its room, and gets the lowest free number of the destination
+  // room when it moves there. The assignment lives in the device store
+  // (name_zone / name_seq); numbers already present in names are adopted on
+  // first run. Names not starting with "HiLux" (any casing) are considered
+  // customized by the user and are never touched.
   async _syncLightNames(lights, force = false) {
     const zones = await this._api.zones.getZones(force ? { $cache: false } : undefined);
     const zoneName = (id) => (zones[id] ? zones[id].name : null);
     const live = this._lightDevicesByAddress();
 
+    const byZone = new Map();
     for (const d of lights) {
       if (!d.name || !/^hilux/i.test(d.name)) continue;
       if (!d.settings || !d.settings.address) continue;
-      const dev = live.get(d.settings.address);
+      if (!byZone.has(d.zone)) byZone.set(d.zone, []);
+      byZone.get(d.zone).push(d);
+    }
 
-      let unit = dev && dev.getSetting('unit_label');
-      if (!unit) {
-        const m = /(\d+-\d+)/.exec(d.name) || /\((\d+)\)/.exec(d.name);
-        if (!m) continue; // no unit known and none derivable — leave alone
-        unit = m[1];
-        if (dev) await dev.setSettings({ unit_label: unit }).catch(() => {});
+    // Number currently visible in the name — seeds the store on first run and
+    // is the fallback when the device object isn't available
+    const nameSeq = (d) => {
+      const m = /\((\d+)\)\s*$/.exec(d.name) || /\d+-(\d+)/.exec(d.name);
+      return m ? parseInt(m[1], 10) : null;
+    };
+
+    for (const [zoneId, members] of byZone) {
+      const zone = zoneName(zoneId);
+      if (!zone) continue;
+
+      const used = new Set();
+      const assigned = [];
+      const pending = [];
+
+      // Lights that already hold a number in this room keep it
+      for (const d of members) {
+        const dev = live.get(d.settings.address);
+        let seq = null;
+        if (dev && dev.getStoreValue('name_zone') === zoneId) {
+          seq = parseInt(dev.getStoreValue('name_seq'), 10) || null;
+        } else if (!dev || dev.getStoreValue('name_zone') == null) {
+          seq = nameSeq(d);
+        }
+        if (seq && !used.has(seq)) {
+          used.add(seq);
+          assigned.push([d, dev, seq]);
+        } else {
+          pending.push(d);
+        }
       }
 
-      const zone = zoneName(d.zone);
-      if (!zone) continue;
-      // Full unit ("2-03") stays in settings; the name shows only the part
-      // after the dash
-      const shortUnit = unit.includes('-') ? unit.split('-').pop() : unit;
-      const expected = `HiLux ${zone} (${shortUnit})`;
-      if (d.name !== expected) {
-        try {
-          await this._api.devices.updateDevice({ id: d.id, device: { name: expected } });
-          this.log(`Renamed light: "${d.name}" → "${expected}"`);
-        } catch (err) {
-          this.error(`Rename of "${d.name}" failed:`, err.message);
+      // Moved-in lights take the lowest free number in the room
+      pending.sort((a, b) => a.name.localeCompare(b.name));
+      for (const d of pending) {
+        let seq = 1;
+        while (used.has(seq)) seq++;
+        used.add(seq);
+        assigned.push([d, live.get(d.settings.address), seq]);
+      }
+
+      for (const [d, dev, seq] of assigned) {
+        if (dev) {
+          await dev.setStoreValue('name_zone', zoneId).catch(() => {});
+          await dev.setStoreValue('name_seq', seq).catch(() => {});
+        }
+        const expected = `HiLux ${zone} (${String(seq).padStart(2, '0')})`;
+        if (d.name !== expected) {
+          try {
+            await this._api.devices.updateDevice({ id: d.id, device: { name: expected } });
+            this.log(`Renamed light: "${d.name}" → "${expected}"`);
+          } catch (err) {
+            this.error(`Rename of "${d.name}" failed:`, err.message);
+          }
         }
       }
     }
