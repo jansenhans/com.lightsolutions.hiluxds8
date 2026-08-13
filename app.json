@@ -1,6 +1,6 @@
 {
   "id": "com.lightsolutions.hiluxds8",
-  "version": "2.5.1",
+  "version": "2.5.2",
   "compatibility": ">=5.0.0",
   "sdk": 3,
   "platforms": [
@@ -76,7 +76,7 @@
           "en": "Fade to [[temperature]] K over [[duration]] seconds"
         },
         "hint": {
-          "en": "Smoothly change the colour temperature (2200 K warm – 6000 K cool) over a duration."
+          "en": "Smoothly change the colour temperature (2200 K warm \u2013 6000 K cool) over a duration."
         },
         "args": [
           {
@@ -160,7 +160,7 @@
           "en": "Wake up to [[brightness]] % and [[temperature]] K over [[duration]] minutes"
         },
         "hint": {
-          "en": "Starts at 1% warm white and slowly brightens to the target brightness and colour temperature — a sunrise in your ceiling."
+          "en": "Starts at 1% warm white and slowly brightens to the target brightness and colour temperature \u2014 a sunrise in your ceiling."
         },
         "args": [
           {
@@ -239,7 +239,7 @@
             "en": "Enforced light settings"
           },
           "hint": {
-            "en": "The app keeps these settings applied on the light itself and re-applies them if they drift — e.g. after a firmware update, which resets them."
+            "en": "The app keeps these settings applied on the light itself and re-applies them if they drift \u2014 e.g. after a firmware update, which resets them."
           },
           "children": [
             {
@@ -346,7 +346,7 @@
               "id": "dim_rate",
               "type": "number",
               "label": {
-                "en": "Dim speed (1 slow – 5 fast)"
+                "en": "Dim speed (1 slow \u2013 5 fast)"
               },
               "hint": {
                 "en": "5 sweeps the full brightness range in about 5 seconds; 1 takes about 25 seconds."
@@ -429,7 +429,7 @@
               "label": {
                 "en": "Switch-off fade (seconds)"
               },
-              "value": 0.5,
+              "value": 1.5,
               "min": 0,
               "max": 10,
               "step": 0.1
