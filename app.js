@@ -449,6 +449,7 @@ class HiluxDS8App extends Homey.App {
     if (parts.length === 1) {
       return html(PanelPage.renderIndex(groups.map((g) => ({ id: String(g.getData().id), name: g.getName() }))));
     }
+    if (parts[1] === 'weather') return json(await this._getWeather());
     const dev = groups.find((g) => String(g.getData().id) === parts[1]);
     if (!dev) { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('unknown group'); return; }
 
@@ -477,6 +478,32 @@ class HiluxDS8App extends Homey.App {
     }
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('unknown action');
+  }
+
+  // Current weather for the panels, from Open-Meteo at the Homey's location,
+  // cached for 15 minutes
+  async _getWeather() {
+    if (this._weatherCache && Date.now() - this._weatherCache.at < 15 * 60 * 1000) {
+      return this._weatherCache.data;
+    }
+    let lat = 50.9;
+    let lon = 4.5;
+    try {
+      lat = this.homey.geolocation.getLatitude();
+      lon = this.homey.geolocation.getLongitude();
+    } catch (e) { /* fall back to defaults */ }
+    const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`
+      + '&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1');
+    if (!res.ok) throw new Error(`weather fetch failed: HTTP ${res.status}`);
+    const j = await res.json();
+    const data = {
+      temp: j.current.temperature_2m,
+      code: j.current.weather_code,
+      min: j.daily.temperature_2m_min[0],
+      max: j.daily.temperature_2m_max[0],
+    };
+    this._weatherCache = { at: Date.now(), data };
+    return data;
   }
 
   // Deploy a panel script to every Shelly Wall Display named in a group's
