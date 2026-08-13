@@ -8,6 +8,7 @@ const ScriptBuilder = require('./lib/I4ScriptBuilder');
 const Deployer = require('./lib/I4Deployer');
 const PanelDeployer = require('./lib/PanelDeployer');
 const PanelPage = require('./lib/PanelPage');
+const MdnsResponder = require('./lib/MdnsResponder');
 
 const REBUILD_DEBOUNCE_MS = 3000;
 const REBUILD_INTERVAL_MS = 5 * 60 * 1000; // catch zone moves and drift
@@ -96,11 +97,139 @@ class HiluxDS8App extends Homey.App {
         });
         return;
       }
+      // The Wall Display's "Home Assistant" WebView only accepts a bare
+      // server address and probes it: answer HA's discovery endpoints, and
+      // serve the caller's own panel at the root (matched by the group's
+      // panel_address setting).
+      if (path === '/auth/providers') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end('[{"name":"Local","id":null,"type":"homeassistant"}]');
+        return;
+      }
+      if (path === '/manifest.json') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end('{"name":"Home Assistant","short_name":"Assist","start_url":"/","display":"standalone"}');
+        return;
+      }
+      if (path === '/api/' || path === '/api') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end('{"message":"API running."}');
+        return;
+      }
+      if (path === '/api/config') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end('{"version":"2026.1.0","location_name":"Homey","state":"RUNNING"}');
+        return;
+      }
+      if (path === '/api/discovery_info') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          uuid: '6d6f636b686f6d6579686f6d6579686f',
+          base_url: 'http://192.168.0.10:4820',
+          external_url: null,
+          internal_url: 'http://192.168.0.10:4820',
+          location_name: 'Homey',
+          installation_type: 'Home Assistant OS',
+          requires_api_password: true,
+          version: '2026.1.0',
+        }));
+        return;
+      }
+      // HA native login flow: complete it immediately with an auth code that
+      // /auth/token below will happily exchange for a token
+      if (path === '/auth/login_flow' || path.startsWith('/auth/login_flow/')) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end('{"type":"create_entry","flow_id":"hilux","result":"hilux","version":1}');
+        return;
+      }
+      if (path === '/auth/authorize' || path === '/auth/token') {
+        // minimal auth flow: immediately hand the client back a token
+        if (path === '/auth/token') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end('{"access_token":"hilux","token_type":"Bearer","refresh_token":"hilux","expires_in":1800}');
+        } else {
+          const cb = new URL(req.url, 'http://x').searchParams.get('redirect_uri') || '/';
+          res.writeHead(302, { Location: `${cb}${cb.includes('?') ? '&' : '?'}code=hilux` });
+          res.end();
+        }
+        return;
+      }
+      if (path === '/' || path === '/lovelace' || path.startsWith('/lovelace/')) {
+        const ip = (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+        this.log(`Panel root request from ${ip} (${req.url})`);
+        let groups = [];
+        try { groups = this.homey.drivers.getDriver(GROUP_DRIVER).getDevices(); } catch (e) { /* not ready */ }
+        // Prefer the group whose panel_address matches the caller; fall back
+        // to the only panel-carrying group (the display's WebView traffic can
+        // originate from a different IP than its Shelly service)
+        const withPanel = groups.filter((g) => (g.getSetting('panel_address') || '').trim() !== '');
+        const dev = withPanel.find((g) => g.getSetting('panel_address').trim() === ip)
+          || (withPanel.length === 1 ? withPanel[0] : null);
+        res.writeHead(dev ? 200 : 302, dev
+          ? { 'Content-Type': 'text/html; charset=utf-8' }
+          : { Location: '/panel' });
+        res.end(dev ? PanelPage.render({ id: String(dev.getData().id), name: dev.getName() }) : '');
+        return;
+      }
+      this.log(`HTTP ${req.method} ${req.url} from ${(req.socket.remoteAddress || '').replace(/^::ffff:/, '')}`);
       res.writeHead(200, { 'Content-Type': 'text/plain' });
       res.end('ok');
     });
+    // HA clients (the Wall Display's WebView mode) validate an instance via
+    // the websocket API — speak just enough of the handshake to pass.
+    const WebSocket = require('ws');
+    this._wss = new WebSocket.Server({ noServer: true });
+    this._pushServer.on('upgrade', (req, socket, head) => {
+      const wsPath = (req.url || '').split('?')[0];
+      this.log(`WS upgrade request: ${wsPath} from ${(req.socket.remoteAddress || '').replace(/^::ffff:/, '')}`);
+      if (wsPath !== '/api/websocket') { socket.destroy(); return; }
+      this._wss.handleUpgrade(req, socket, head, (ws) => {
+        ws.send(JSON.stringify({ type: 'auth_required', ha_version: '2026.1.0' }));
+        ws.on('message', (data) => {
+          try {
+            const msg = JSON.parse(data);
+            this.log('WS message:', String(data).slice(0, 300));
+            if (msg.type === 'auth') {
+              ws.send(JSON.stringify({ type: 'auth_ok', ha_version: '2026.1.0' }));
+              return;
+            }
+            if (typeof msg.id !== 'number') return;
+            let result = null;
+            if (msg.type === 'get_config') {
+              result = {
+                latitude: 50.9, longitude: 4.5, elevation: 0, radius: 100,
+                unit_system: { length: 'km', mass: 'kg', temperature: '°C', volume: 'L' },
+                location_name: 'Homey', time_zone: 'Europe/Brussels',
+                components: ['lovelace', 'frontend', 'api', 'websocket_api'],
+                version: '2026.1.0', state: 'RUNNING',
+              };
+            } else if (msg.type === 'get_states' || msg.type === 'get_services' || msg.type === 'get_panels') {
+              result = msg.type === 'get_states' ? [] : {};
+            }
+            ws.send(JSON.stringify({ id: msg.id, type: 'result', success: true, result }));
+          } catch (e) { /* ignore malformed frames */ }
+        });
+        ws.on('error', () => {});
+      });
+    });
     this._pushServer.on('error', (err) => this.error('Push server error:', err.message));
     this._pushServer.listen(PUSH_PORT, () => this.log(`Push receiver listening on :${PUSH_PORT}`));
+
+    // Advertise the panel server as a Home Assistant instance — the Wall
+    // Display's HA mode only offers instances it discovers via mDNS
+    try {
+      const localIp = (await this.homey.cloud.getLocalAddress()).split(':')[0];
+      this._mdns = new MdnsResponder({
+        ip: localIp,
+        port: PUSH_PORT,
+        instance: 'Homey',
+        log: (...a) => this.log(...a),
+        error: (...a) => this.error(...a),
+      });
+      this._mdns.start();
+    } catch (err) {
+      this.error('mDNS responder failed to start:', err.message);
+    }
 
     // First rebuild shortly after startup (lets drivers finish init), then a
     // periodic full verify (force) that also heals an i4 that was rebooted
@@ -111,6 +240,7 @@ class HiluxDS8App extends Homey.App {
 
   async onUninit() {
     if (this._pushServer) this._pushServer.close();
+    if (this._mdns) this._mdns.stop();
   }
 
   // Base URL for state-push callbacks, baked into webhooks and i4 scripts.

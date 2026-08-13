@@ -4,6 +4,7 @@
   "private": true,
   "main": "app.js",
   "dependencies": {
-    "homey-api": "^3.19.1"
+    "homey-api": "^3.19.1",
+    "ws": "^7.5.11"
   }
 }
