@@ -465,6 +465,19 @@ class HiluxDS8App extends Homey.App {
         ct: Math.round(CT_MAX - (typeof t === 'number' ? t : 0.75) * (CT_MAX - CT_MIN)),
       });
     }
+    if (action === 'presence') {
+      // Proxy for the wall display's own occupancy sensor (its WebView can't
+      // query the local RPC cross-origin) — used to dismiss the screensaver
+      const ip = (dev.getSetting('panel_address') || '').trim();
+      if (!ip) return json({ present: false });
+      try {
+        const r = await fetch(`http://${ip}/rpc/Occupancy.GetStatus?id=0`, { signal: AbortSignal.timeout(2000) });
+        const j = await r.json();
+        return json({ present: j.value === true });
+      } catch (e) {
+        return json({ present: false });
+      }
+    }
     if (action === 'set') {
       const values = {};
       if (u.searchParams.has('on')) values.onoff = u.searchParams.get('on') === 'true';
