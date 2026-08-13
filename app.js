@@ -7,12 +7,15 @@ const { HomeyAPI } = require('homey-api');
 const ScriptBuilder = require('./lib/I4ScriptBuilder');
 const Deployer = require('./lib/I4Deployer');
 const PanelDeployer = require('./lib/PanelDeployer');
+const PanelPage = require('./lib/PanelPage');
 
 const REBUILD_DEBOUNCE_MS = 3000;
 const REBUILD_INTERVAL_MS = 5 * 60 * 1000; // catch zone moves and drift
 const DEPLOY_RETRY_DELAY_MS = 10000;
 const NOTIFY_AFTER_CONSECUTIVE_FAILURES = 3; // ~15 min of real outage
 const NOTIFY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+const CT_MIN = 2200;
+const CT_MAX = 6000;
 const LIGHT_DRIVER = 'hilux-ds8';
 const BUTTON_DRIVER = 'hilux-i4-button';
 const GROUP_DRIVER = 'hilux-group';
@@ -77,10 +80,24 @@ class HiluxDS8App extends Homey.App {
     // tiles follow in about a second instead of a poll cycle.
     this._groupRefreshTimer = null;
     this._pushServer = http.createServer((req, res) => {
+      const path = (req.url || '').split('?')[0];
+      const m = /^\/hilux-push\/(\d+\.\d+\.\d+\.\d+)$/.exec(path);
+      if (m) {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('ok');
+        this.lightStateTouched(m[1]);
+        return;
+      }
+      // Touch dashboard for wall displays (rendered in the display's WebView)
+      if (path === '/panel' || path.startsWith('/panel/')) {
+        this._handlePanel(req, res).catch((err) => {
+          this.error('Panel request failed:', err.message);
+          try { res.writeHead(500, { 'Content-Type': 'text/plain' }); res.end('error'); } catch (e) { /* headers sent */ }
+        });
+        return;
+      }
       res.writeHead(200, { 'Content-Type': 'text/plain' });
       res.end('ok');
-      const m = /^\/hilux-push\/(\d+\.\d+\.\d+\.\d+)$/.exec((req.url || '').split('?')[0]);
-      if (m) this.lightStateTouched(m[1]);
     });
     this._pushServer.on('error', (err) => this.error('Push server error:', err.message));
     this._pushServer.listen(PUSH_PORT, () => this.log(`Push receiver listening on :${PUSH_PORT}`));
@@ -284,6 +301,52 @@ class HiluxDS8App extends Homey.App {
       body: JSON.stringify({ name }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+  }
+
+  // Routes for the wall-display touch dashboard: /panel lists the groups,
+  // /panel/<id> serves the page, /panel/<id>/state|set are its JSON API.
+  // Commands reuse the group's own capability path, so they behave exactly
+  // like taps on the Homey group tile.
+  async _handlePanel(req, res) {
+    const u = new URL(req.url, 'http://localhost');
+    const parts = u.pathname.split('/').filter(Boolean);
+    const json = (obj) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
+    const html = (s) => { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(s); };
+
+    let groups = [];
+    try { groups = this.homey.drivers.getDriver(GROUP_DRIVER).getDevices(); } catch (e) { /* driver not ready */ }
+
+    if (parts.length === 1) {
+      return html(PanelPage.renderIndex(groups.map((g) => ({ id: String(g.getData().id), name: g.getName() }))));
+    }
+    const dev = groups.find((g) => String(g.getData().id) === parts[1]);
+    if (!dev) { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('unknown group'); return; }
+
+    const action = parts[2] || 'page';
+    if (action === 'page') return html(PanelPage.render({ id: parts[1], name: dev.getName() }));
+
+    if (action === 'state') {
+      const t = dev.getCapabilityValue('light_temperature');
+      return json({
+        name: dev.getName(),
+        on: dev.getCapabilityValue('onoff') === true,
+        b: Math.round((dev.getCapabilityValue('dim') || 0.5) * 100),
+        ct: Math.round(CT_MAX - (typeof t === 'number' ? t : 0.75) * (CT_MAX - CT_MIN)),
+      });
+    }
+    if (action === 'set') {
+      const values = {};
+      if (u.searchParams.has('on')) values.onoff = u.searchParams.get('on') === 'true';
+      if (u.searchParams.has('b')) values.dim = Math.min(1, Math.max(0.01, Number(u.searchParams.get('b')) / 100));
+      if (u.searchParams.has('ct')) {
+        const ctv = Math.min(CT_MAX, Math.max(CT_MIN, Number(u.searchParams.get('ct'))));
+        values.light_temperature = (CT_MAX - ctv) / (CT_MAX - CT_MIN);
+      }
+      await dev._onCapabilities(values);
+      return json({ ok: true });
+    }
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('unknown action');
   }
 
   // Deploy a panel script to every Shelly Wall Display named in a group's
