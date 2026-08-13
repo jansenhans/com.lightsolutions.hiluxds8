@@ -1,6 +1,6 @@
 {
   "id": "com.lightsolutions.hiluxds8",
-  "version": "2.5.2",
+  "version": "2.5.3",
   "compatibility": ">=5.0.0",
   "sdk": 3,
   "platforms": [
@@ -251,7 +251,7 @@
               "hint": {
                 "en": "Used by the light for any command that doesn't specify its own fade time."
               },
-              "value": 1,
+              "value": 1.5,
               "min": 0,
               "max": 10,
               "step": 0.1,
