@@ -89,6 +89,16 @@ class HiluxDS8App extends Homey.App {
         this.lightStateTouched(m[1]);
         return;
       }
+      // Motion webhook from a wall display — remembered so the panel page's
+      // presence poll can dismiss its screensaver
+      const pm = /^\/panel-motion\/(\d+\.\d+\.\d+\.\d+)$/.exec(path);
+      if (pm) {
+        if (!this._panelMotionAt) this._panelMotionAt = new Map();
+        this._panelMotionAt.set(pm[1], Date.now());
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('ok');
+        return;
+      }
       // Touch dashboard for wall displays (rendered in the display's WebView)
       if (path === '/panel' || path.startsWith('/panel/')) {
         this._handlePanel(req, res).catch((err) => {
@@ -466,10 +476,14 @@ class HiluxDS8App extends Homey.App {
       });
     }
     if (action === 'presence') {
-      // Proxy for the wall display's own occupancy sensor (its WebView can't
-      // query the local RPC cross-origin) — used to dismiss the screensaver
+      // Used by the panel page to dismiss its screensaver. Primary signal:
+      // the display's own motion webhook (see /panel-motion); fallback: the
+      // occupancy sensor polled via RPC (a stub on some hardware).
       const ip = (dev.getSetting('panel_address') || '').trim();
       if (!ip) return json({ present: false });
+      if (this._panelMotionAt && Date.now() - (this._panelMotionAt.get(ip) || 0) < 10000) {
+        return json({ present: true });
+      }
       try {
         const r = await fetch(`http://${ip}/rpc/Occupancy.GetStatus?id=0`, { signal: AbortSignal.timeout(2000) });
         const j = await r.json();
@@ -538,7 +552,9 @@ class HiluxDS8App extends Homey.App {
           continue;
         }
         const fade = num(g.getSetting('fade_s'), 1.5) || 1.5;
-        await PanelDeployer.deploy(ip, { name: g.getName(), lights: addresses, fade }, (m) => this.log(m));
+        const base = await this.getPushBaseUrl();
+        const motionUrl = base.replace('/hilux-push/', `/panel-motion/${ip}`);
+        await PanelDeployer.deploy(ip, { name: g.getName(), lights: addresses, fade, motionUrl }, (m) => this.log(m));
       } catch (err) {
         this.error(`Panel deploy to ${ip} failed:`, err.message);
       }
