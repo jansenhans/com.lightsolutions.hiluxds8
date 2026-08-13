@@ -6,6 +6,7 @@ const { HomeyAPI } = require('homey-api');
 
 const ScriptBuilder = require('./lib/I4ScriptBuilder');
 const Deployer = require('./lib/I4Deployer');
+const PanelDeployer = require('./lib/PanelDeployer');
 
 const REBUILD_DEBOUNCE_MS = 3000;
 const REBUILD_INTERVAL_MS = 5 * 60 * 1000; // catch zone moves and drift
@@ -285,6 +286,32 @@ class HiluxDS8App extends Homey.App {
     if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
   }
 
+  // Deploy a panel script to every Shelly Wall Display named in a group's
+  // panel_address setting, with the group's currently resolved member lights.
+  async _deployPanels() {
+    let groups = [];
+    try {
+      groups = this.homey.drivers.getDriver(GROUP_DRIVER).getDevices();
+    } catch (e) {
+      return;
+    }
+    for (const g of groups) {
+      const ip = (g.getSetting('panel_address') || '').trim();
+      if (!/^\d+\.\d+\.\d+\.\d+$/.test(ip)) continue;
+      try {
+        const { addresses } = await this.resolveGroupAddresses(g.getStoreValue('zoneIds') || []);
+        if (addresses.length === 0) {
+          this.log(`Panel ${ip}: group "${g.getName()}" has no lights — skipped`);
+          continue;
+        }
+        const fade = num(g.getSetting('fade_s'), 1.5) || 1.5;
+        await PanelDeployer.deploy(ip, { name: g.getName(), lights: addresses, fade }, (m) => this.log(m));
+      } catch (err) {
+        this.error(`Panel deploy to ${ip} failed:`, err.message);
+      }
+    }
+  }
+
   _lightDevicesByAddress() {
     const map = new Map();
     try {
@@ -348,6 +375,10 @@ class HiluxDS8App extends Homey.App {
     // Keep light names in sync with their room (same triggers as the button
     // scripts: instant on zone moves, healed by the periodic sweep)
     await this._syncLightNames(lights, force).catch((err) => this.error('Name sync failed:', err.message));
+
+    // Wall-display panels follow their group's membership, same lifecycle as
+    // the i4 scripts (instant on relevant events, healed by the periodic sweep)
+    await this._deployPanels().catch((err) => this.error('Panel deploy failed:', err.message));
 
     const buttons = all.filter((d) => d.driverId === appPrefix + BUTTON_DRIVER);
     if (buttons.length === 0) return;

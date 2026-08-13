@@ -1,6 +1,6 @@
 {
   "id": "com.lightsolutions.hiluxds8",
-  "version": "2.5.3",
+  "version": "2.6.0",
   "compatibility": ">=5.0.0",
   "sdk": 3,
   "platforms": [
@@ -511,6 +511,17 @@
           "type": "label",
           "label": {
             "en": "Zones in this group"
+          },
+          "value": ""
+        },
+        {
+          "id": "panel_address",
+          "type": "text",
+          "label": {
+            "en": "Wall panel IP address"
+          },
+          "hint": {
+            "en": "IP address of a Shelly Wall Display that should control this group. The app deploys and maintains a touch panel (toggle + brightness + colour sliders) on it automatically, following the group's lights. Leave empty for no panel."
           },
           "value": ""
         }
