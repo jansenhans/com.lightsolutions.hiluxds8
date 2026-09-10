@@ -9,6 +9,7 @@ const POLL_INTERVAL_MS = 30000; // backstop only — push events drive refreshes
 const COMMAND_COOLDOWN_MS = 5000; // skip mirror poll this long after a command
 const STAGGER_MS = 30; // gap between per-light commands in a broadcast
 const CAPABILITY_COMBINE_MS = 300;
+const VERIFY_TRIES = 3; // post-fade verify rounds for on/off broadcasts
 
 function homeyTemperatureToCt(temperature) {
   const clamped = Math.min(1, Math.max(0, temperature));
@@ -26,6 +27,7 @@ class HiluxGroupDevice extends Homey.Device {
     this.log('HiluX Group initialized:', this.getName());
 
     this._lastCommandAt = 0;
+    this._cmdGen = 0; // bumped per broadcast; cancels superseded verify rounds
 
     // Migrate/ensure the counter capability (measure_-prefixed so Homey can
     // offer it as a tile status indicator, should light tiles ever honor it)
@@ -95,6 +97,8 @@ class HiluxGroupDevice extends Homey.Device {
       throw new Error('This group has no HiluX lights in its zones');
     }
     this._lastCommandAt = Date.now();
+    this._cmdGen += 1;
+    const gen = this._cmdGen;
 
     // One shared value, near-simultaneous, lightly staggered so a large
     // group doesn't burst the Wi-Fi (same reasoning as settings enforcement)
@@ -132,6 +136,41 @@ class HiluxGroupDevice extends Homey.Device {
     // refresh triggered by push events can land a hair inside the window and
     // be swallowed, which froze tiles until the next unrelated event.
     this.homey.setTimeout(() => this.refreshNow(), fadeMs + 1700);
+
+    if (typeof params.on === 'boolean') {
+      this._verifyBroadcast(gen, addresses, params, fadeMs)
+        .catch((err) => this.error('Verify failed:', err.message));
+    }
+  }
+
+  // After the fade, make sure every light actually reached the commanded
+  // on/off state — a napping light can miss the broadcast entirely (same
+  // verify rounds as the i4 button script, v2.9.1). A light in the wrong
+  // state, or one that doesn't answer the status check, gets the command
+  // re-sent and is re-checked next round. Abandoned as soon as a newer
+  // broadcast takes over.
+  async _verifyBroadcast(gen, addresses, params, fadeMs) {
+    const waitMs = Math.max(2000, fadeMs + 800);
+    let pending = addresses;
+    for (let round = 0; round < VERIFY_TRIES && pending.length > 0; round++) {
+      await new Promise((r) => this.homey.setTimeout(r, round === 0 ? fadeMs + 900 : waitMs));
+      if (gen !== this._cmdGen) return;
+      const results = await Promise.all(pending.map(async (ip) => {
+        try {
+          const st = await new ShellyRpcClient(ip).getCctStatus();
+          if (st && st.output === params.on) return null;
+        } catch (err) { /* unreachable — likely missed the broadcast too */ }
+        if (gen !== this._cmdGen) return null;
+        try {
+          await new ShellyRpcClient(ip).setCct({ id: 0, ...params });
+          this.log(`Verify round ${round + 1}: re-sent ${JSON.stringify(params)} to ${ip}`);
+        } catch (err) {
+          this.error(`Verify re-send to ${ip} failed:`, err.message);
+        }
+        return ip;
+      }));
+      pending = results.filter(Boolean);
+    }
   }
 
   // Mirror member state onto the tile (from the members' own Homey devices —
