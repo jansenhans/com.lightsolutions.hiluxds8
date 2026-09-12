@@ -247,9 +247,17 @@ class HiluxDS8Device extends Homey.Device {
       // fade_rate 1..5, each unit ~4%/s => full range in ~25/rate seconds
       const fadeRate = Math.min(5, Math.max(1, Math.round(25 / seconds)));
       this._lastCommandAt = Date.now();
-      if (direction === 'up') await this.client.dimUp(0, fadeRate);
-      else await this.client.dimDown(0, fadeRate);
-      await this.setCapabilityValue('onoff', true).catch(this.error);
+      if (direction === 'up') {
+        // Native CCT.DimUp is avoided: DS8 fw 2.0.0 latches an upward clamp
+        // after a stopped dim (upward commands silently ignored until an
+        // off/on cycle); a timed on=true fade bypasses it, and CCT.DimStop
+        // freezes Set transitions so stopDimming works unchanged.
+        const from = on ? current : 1;
+        await this.fadeTo({ brightness: 100, seconds: Math.max(1, (100 - from) / (fadeRate * 4)) });
+      } else {
+        await this.client.dimDown(0, fadeRate);
+        await this.setCapabilityValue('onoff', true).catch(this.error);
+      }
     } catch (err) {
       // Older firmware without CCT.DimUp/DimDown — timed fade to the extreme
       const from = on ? current : 1;
