@@ -276,7 +276,8 @@ class HiluxDS8Device extends Homey.Device {
     const status = await this.client.getCctStatus(0);
     if (status.output === true && typeof status.brightness === 'number') {
       const brightness = Math.round(status.brightness);
-      await this._setCct({ on: true, brightness, transitionDuration: 0 });
+      // 0.5 is the firmware's minimum transition (lower values are rejected)
+      await this._setCct({ on: true, brightness, transitionDuration: 0.5 });
       await this.setCapabilityValue('dim', brightness / 100).catch(this.error);
     }
     await this.poll().catch(() => {});
