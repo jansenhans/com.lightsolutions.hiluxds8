@@ -267,21 +267,19 @@ class HiluxDS8Device extends Homey.Device {
     }
   }
 
-  // Freeze an ongoing fade at the light's current brightness.
+  // Freeze an ongoing fade by re-setting the current brightness without a
+  // transition. CCT.DimStop is avoided: on fw 2.0.0 a stopped fade poisons
+  // the light — subsequent upward brightness commands are silently ignored
+  // until an off/on cycle.
   async stopDimming() {
-    try {
-      this._lastCommandAt = Date.now();
-      await this.client.dimStop(0);
-      await this.poll().catch(() => {});
-    } catch (err) {
-      // Older firmware without CCT.DimStop — freeze by re-setting the
-      // current brightness without a transition
-      const status = await this.client.getCctStatus(0);
-      if (typeof status.brightness !== 'number') return;
+    this._lastCommandAt = Date.now();
+    const status = await this.client.getCctStatus(0);
+    if (status.output === true && typeof status.brightness === 'number') {
       const brightness = Math.round(status.brightness);
-      await this._setCct({ brightness });
+      await this._setCct({ on: true, brightness, transitionDuration: 0 });
       await this.setCapabilityValue('dim', brightness / 100).catch(this.error);
     }
+    await this.poll().catch(() => {});
   }
 
   async onCapabilityOnoff(value) {
