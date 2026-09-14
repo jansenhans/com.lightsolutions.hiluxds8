@@ -612,11 +612,13 @@ class HiluxDS8App extends Homey.App {
   }
 
   async _doRebuild(reason, force = false) {
-    // Forced runs bypass the realtime cache: homey-api never re-syncs it after
-    // a socket reconnect, so zone moves that happen while the subscription is
-    // down (or wedged) would otherwise stay invisible forever. Fetching fresh
-    // also repairs the cache for the realtime path.
-    const all = Object.values(await this._api.devices.getDevices(force ? { $cache: false } : undefined));
+    // Always bypass the realtime cache: homey-api never re-syncs it after a
+    // socket reconnect, and settings-triggered rebuilds racing a batch of
+    // address updates have deployed configs with stale light addresses from
+    // it (Bedroom Hans migration, 2026-09-12). Rebuilds are debounced and
+    // infrequent, so a fresh fetch is cheap; it also repairs the cache for
+    // the realtime path.
+    const all = Object.values(await this._api.devices.getDevices({ $cache: false }));
     const appPrefix = `homey:app:${this.homey.manifest.id}:`;
 
     const lights = all.filter((d) => d.driverId === appPrefix + LIGHT_DRIVER);

@@ -1,6 +1,6 @@
 {
   "id": "com.lightsolutions.hiluxds8",
-  "version": "2.9.8",
+  "version": "2.9.9",
   "compatibility": ">=5.0.0",
   "sdk": 3,
   "platforms": [
