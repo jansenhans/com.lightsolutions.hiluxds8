@@ -1,6 +1,6 @@
 {
   "id": "com.lightsolutions.hiluxds8",
-  "version": "2.11.0",
+  "version": "2.11.1",
   "compatibility": ">=5.0.0",
   "sdk": 3,
   "platforms": [
@@ -352,7 +352,7 @@
               "hint": {
                 "en": "5 sweeps the full brightness range in about 5 seconds; 1 takes about 25 seconds."
               },
-              "value": 5,
+              "value": 4,
               "min": 1,
               "max": 5,
               "step": 1

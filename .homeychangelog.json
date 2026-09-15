@@ -40,5 +40,8 @@
   },
   "2.11.0": {
     "en": "Wall buttons now relay group commands through the app for parallel dispatch — large clusters switch near-simultaneously (local dispatch remains as fallback when Homey is unreachable)."
+  },
+  "2.11.1": {
+    "en": "New wall buttons now default to dim speed 4 (slightly gentler)."
   }
 }
