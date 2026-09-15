@@ -37,5 +37,8 @@
   },
   "1.0.0": {
     "en": "First attempt"
+  },
+  "2.11.0": {
+    "en": "Wall buttons now relay group commands through the app for parallel dispatch — large clusters switch near-simultaneously (local dispatch remains as fallback when Homey is unreachable)."
   }
 }

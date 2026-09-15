@@ -89,6 +89,23 @@ class HiluxDS8App extends Homey.App {
         this.lightStateTouched(m[1]);
         return;
       }
+      // Command relay from an i4 button script: the i4 can only trickle
+      // calls out one per timer tick, so it hands the whole burst to us and
+      // we fan it out to every light in parallel (~0.5 s for any cluster
+      // size, vs seconds of ripple from the i4 itself). A non-200 answer
+      // makes the i4 dispatch locally, so refusing unknown buttons is safe.
+      const cm = /^\/hilux-cmd\/(\d+\.\d+\.\d+\.\d+)\/(\d+)$/.exec(path);
+      if (cm) {
+        let accepted = false;
+        try {
+          accepted = this.relayCommand(cm[1], cm[2], new URL(req.url, 'http://localhost').searchParams);
+        } catch (err) {
+          this.error('Relay request failed:', err.message);
+        }
+        res.writeHead(accepted ? 200 : 404, { 'Content-Type': 'text/plain' });
+        res.end(accepted ? 'ok' : 'unknown button');
+        return;
+      }
       // Motion webhook from a wall display — remembered so the panel page's
       // presence poll can dismiss its screensaver
       const pm = /^\/panel-motion\/(\d+\.\d+\.\d+\.\d+)$/.exec(path);
@@ -574,6 +591,101 @@ class HiluxDS8App extends Homey.App {
     return map;
   }
 
+  // --- i4 command relay ----------------------------------------------------
+
+  // Validate a relayed burst and queue it. The light list comes from the
+  // same per-i4 config the deployer built (kept current by the rebuild
+  // triggers), so relay and deployed script always agree on membership.
+  relayCommand(address, input, params) {
+    const cfg = this._i4Configs
+      && this._i4Configs.get(address)
+      && this._i4Configs.get(address)[input];
+    if (!cfg || !cfg.lights || cfg.lights.length === 0) return false;
+    if (params.get('m') !== 'CCT.Set') return false;
+    // "&" travels as "," (mJS cannot url-encode); values are plain tokens
+    const qs = (params.get('q') || '').split(',').filter(Boolean).join('&');
+    if (!/^[a-z_]+=[\w.]+(?:&[a-z_]+=[\w.]+)*$/.test(qs)) return false;
+    this._enqueueBurst(`${address}/${input}`, cfg.lights, qs, params.get('v') === '1');
+    return true;
+  }
+
+  // Bursts for one button run strictly in arrival order (a dim fade must
+  // not overtake its own switch-on prelude); a newer burst abandons any
+  // older verify rounds via the per-button generation counter.
+  _enqueueBurst(key, addresses, qs, verify) {
+    if (!this._relayGens) {
+      this._relayGens = new Map();
+      this._relayChains = new Map();
+    }
+    const gen = (this._relayGens.get(key) || 0) + 1;
+    this._relayGens.set(key, gen);
+    const prev = this._relayChains.get(key) || Promise.resolve();
+    this._relayChains.set(key, prev
+      .then(() => this._dispatchBurst(key, gen, addresses, qs, verify))
+      .catch((err) => this.error(`Relay burst ${key} failed:`, err.message)));
+  }
+
+  async _dispatchBurst(key, gen, addresses, qs, verify) {
+    if (this._relayGens.get(key) !== gen) return; // superseded while queued
+    const send = async (ip) => {
+      const r = await fetch(`http://${ip}/rpc/CCT.Set?id=0&${qs}`, { signal: AbortSignal.timeout(3000) });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    };
+    // Parallel with a light stagger, same reasoning as group broadcasts
+    const failed = (await Promise.all(addresses.map((ip, i) => new Promise((resolve) => {
+      this.homey.setTimeout(() => {
+        send(ip).then(() => resolve(null), () => resolve(ip));
+      }, i * 30);
+    })))).filter(Boolean);
+    if (failed.length > 0 && this._relayGens.get(key) === gen) {
+      await Promise.all(failed.map((ip) => send(ip).catch((err) => {
+        this.error(`Relay ${key}: re-send to ${ip} failed:`, err.message);
+      })));
+    }
+    this.log(`Relay ${key}: CCT.Set ${qs} → ${addresses.length - failed.length}/${addresses.length} first-try`);
+
+    const fadeMatch = /(?:^|&)transition_duration=([\d.]+)/.exec(qs);
+    const fadeMs = fadeMatch ? parseFloat(fadeMatch[1]) * 1000 : 0;
+    // After the fade lands, lights re-poll so tiles and group mirrors follow
+    this.homey.setTimeout(() => {
+      if (this._relayGens.get(key) === gen) this.pollLights(addresses);
+    }, fadeMs + 800);
+
+    const onMatch = /(?:^|&)on=(true|false)/.exec(qs);
+    if (verify && onMatch) {
+      this._verifyBurst(key, gen, addresses, qs, onMatch[1] === 'true', fadeMs)
+        .catch((err) => this.error(`Relay verify ${key} failed:`, err.message));
+    }
+  }
+
+  // Post-fade verify rounds for relayed on/off bursts — same contract as the
+  // group device and the i4's own local verify: a napping light that missed
+  // the burst gets the command re-sent until confirmed, up to three rounds.
+  async _verifyBurst(key, gen, addresses, qs, wantOn, fadeMs) {
+    const waitMs = Math.max(2000, fadeMs + 800);
+    let pending = addresses;
+    for (let round = 0; round < 3 && pending.length > 0; round++) {
+      await new Promise((r) => this.homey.setTimeout(r, round === 0 ? fadeMs + 900 : waitMs));
+      if (this._relayGens.get(key) !== gen) return;
+      const results = await Promise.all(pending.map(async (ip) => {
+        try {
+          const r = await fetch(`http://${ip}/rpc/CCT.GetStatus?id=0`, { signal: AbortSignal.timeout(3000) });
+          const st = await r.json();
+          if (st && st.output === wantOn) return null;
+        } catch (err) { /* unreachable — likely missed the burst too */ }
+        if (this._relayGens.get(key) !== gen) return null;
+        try {
+          await fetch(`http://${ip}/rpc/CCT.Set?id=0&${qs}`, { signal: AbortSignal.timeout(3000) });
+          this.log(`Relay verify ${key} round ${round + 1}: re-sent to ${ip}`);
+        } catch (err) {
+          this.error(`Relay verify ${key}: re-send to ${ip} failed:`, err.message);
+        }
+        return ip;
+      }));
+      pending = results.filter(Boolean);
+    }
+  }
+
   // After a group broadcast, member lights are told to re-poll so their
   // Homey state (and every group tile mirroring them) syncs promptly.
   pollLights(addresses) {
@@ -670,10 +782,14 @@ class HiluxDS8App extends Homey.App {
       };
     }
 
+    // The command relay serves from this same map, so a zone move updates
+    // the deployed script and the relay's light list together.
+    this._i4Configs = perI4;
+
     const pushBaseUrl = await this.getPushBaseUrl().catch(() => null);
 
     for (const [address, configs] of perI4) {
-      const { code, hash } = ScriptBuilder.generate(configs, pushBaseUrl);
+      const { code, hash } = ScriptBuilder.generate(configs, pushBaseUrl, address);
       // Device events fire often (renames, capability chatter) — only talk
       // to the i4 when the config actually changed. Periodic runs force a
       // full on-device verify.
