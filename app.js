@@ -434,6 +434,35 @@ class HiluxDS8App extends Homey.App {
     }
   }
 
+  // Keep individual lamps out of HomeKit — family control goes through the
+  // group devices, one tile per room (Hans's policy, 2026-09-18). Homey
+  // injects a homekit_exclude setting into every device once HomeKit is
+  // enabled; lamps get it forced to true here. Groups are deliberately left
+  // alone: exposed by default, and a manual hide on a group is respected.
+  // Uses the same user API key as renaming (the app's own session cannot
+  // write device settings).
+  async _syncHomekitExclusion(lights) {
+    const key = this.homey.settings.get('api_key');
+    if (!key) return; // the rename path already nags about a missing key
+    const baseUrl = await this.homey.api.getLocalUrl();
+    for (const d of lights) {
+      if (!d.settings || d.settings.homekit_exclude === true) continue;
+      try {
+        const res = await fetch(new URL(`/api/manager/devices/device/${d.id}/settings`, baseUrl), {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+          // Body is the bare settings map (PUT merges); wrapping it in
+          // {"settings": ...} would store a junk key instead.
+          body: JSON.stringify({ homekit_exclude: true }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        this.log(`Hidden from HomeKit: ${d.name}`);
+      } catch (err) {
+        this.error(`HomeKit exclusion for "${d.name}" failed:`, err.message);
+      }
+    }
+  }
+
   // Rename a device through the local Web API. The app's own API session
   // only gets homey.device.readonly/control — renaming needs the full
   // homey.device scope, which Homey never grants to apps. So we use a
@@ -736,6 +765,9 @@ class HiluxDS8App extends Homey.App {
     // Keep light names in sync with their room (same triggers as the button
     // scripts: instant on zone moves, healed by the periodic sweep)
     await this._syncLightNames(lights, force).catch((err) => this.error('Name sync failed:', err.message));
+
+    // New lamps are hidden from HomeKit automatically (groups stay exposed)
+    await this._syncHomekitExclusion(lights).catch((err) => this.error('HomeKit sync failed:', err.message));
 
     // Wall-display panels follow their group's membership, same lifecycle as
     // the i4 scripts (instant on relevant events, healed by the periodic sweep)

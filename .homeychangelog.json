@@ -46,5 +46,8 @@
   },
   "2.11.2": {
     "en": "Compound gestures accept slower taps (tap window 0.35 s -> 0.55 s)."
+  },
+  "2.12.0": {
+    "en": "Lamps are hidden from HomeKit automatically; family control goes through the room groups."
   }
 }
