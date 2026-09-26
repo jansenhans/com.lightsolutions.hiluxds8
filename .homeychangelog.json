@@ -55,5 +55,8 @@
   },
   "2.12.3": {
     "en": "Group tiles (Homey app, Apple Home) also re-send to a slow light after 1 s instead of waiting up to 8 s."
+  },
+  "2.12.4": {
+    "en": "Fade times below 0.5 s (which the lights reject) are raised to 0.5 s instead of silently breaking the button or group."
   }
 }

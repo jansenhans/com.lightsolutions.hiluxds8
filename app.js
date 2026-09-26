@@ -871,8 +871,10 @@ class HiluxDS8App extends Homey.App {
         ctSweepS: num(s.ct_sweep_s, 5),
         presetDouble: num(s.preset_double, 20),
         presetTriple: num(s.preset_triple, 50),
-        fadeOn: num(s.fade_on, 1.5),
-        fadeOff: num(s.fade_off, 0.5),
+        // CCT.Set rejects transitions under 0.5 s (-103) — the button would
+        // silently stop switching, so older stored values are clamped
+        fadeOn: Math.max(0.5, num(s.fade_on, 1.5)),
+        fadeOff: Math.max(0.5, num(s.fade_off, 0.5)),
       };
     }
 

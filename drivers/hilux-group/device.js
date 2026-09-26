@@ -84,7 +84,9 @@ class HiluxGroupDevice extends Homey.Device {
     if ('light_temperature' in values) params.ct = homeyTemperatureToCt(values.light_temperature);
 
     const fade = this.getSetting('fade_s');
-    if (typeof fade === 'number' && fade > 0) params.transitionDuration = fade;
+    // 0 = the lights' own default; anything else must be >= 0.5 s or CCT.Set
+    // rejects the whole command (-103)
+    if (typeof fade === 'number' && fade > 0) params.transitionDuration = Math.max(0.5, fade);
 
     // Optimistic UI: reflect the command immediately (Homey does not set
     // capability values automatically for combined listeners)
