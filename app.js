@@ -21,6 +21,13 @@ const LIGHT_DRIVER = 'hilux-ds8';
 const BUTTON_DRIVER = 'hilux-i4-button';
 const GROUP_DRIVER = 'hilux-group';
 const PUSH_PORT = 4820; // local HTTP receiver for light-state push
+// Relayed commands: a healthy light answers in 0.1-0.3 s, so one that hasn't
+// within a second gets the (idempotent) command again rather than waiting
+// out a long timeout — a single 3 s timeout + retry left one light switching
+// off 6 s after its room (Bedroom Anne-Sophie, 2026-09-26).
+const RELAY_TRY_MS = 1000;
+const RELAY_TRIES = 3;
+const DIAG_MAX_BURSTS = 300; // relay timing history served at /hilux-diag
 const GROUP_REFRESH_DEBOUNCE_MS = 700; // lets a nudged poll land first
 
 function num(value, fallback) {
@@ -104,6 +111,13 @@ class HiluxDS8App extends Homey.App {
         }
         res.writeHead(accepted ? 200 : 404, { 'Content-Type': 'text/plain' });
         res.end(accepted ? 'ok' : 'unknown button');
+        return;
+      }
+      // Relay timing history: which light answered late, needed a re-send
+      // or a verify rescue — the evidence for "that was slow" reports
+      if (path === '/hilux-diag') {
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end(this._renderDiag(new URL(req.url, 'http://localhost').searchParams.get('all') === '1'));
         return;
       }
       // Motion webhook from a wall display — remembered so the panel page's
@@ -656,22 +670,32 @@ class HiluxDS8App extends Homey.App {
 
   async _dispatchBurst(key, gen, addresses, qs, verify) {
     if (this._relayGens.get(key) !== gen) return; // superseded while queued
+    const t0 = Date.now();
+    const diag = { t: t0, key, gen, qs, lights: {}, verify: [] };
+    this._recordDiag(diag);
     const send = async (ip) => {
-      const r = await fetch(`http://${ip}/rpc/CCT.Set?id=0&${qs}`, { signal: AbortSignal.timeout(3000) });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      for (let attempt = 1; ; attempt++) {
+        try {
+          const r = await fetch(`http://${ip}/rpc/CCT.Set?id=0&${qs}`, { signal: AbortSignal.timeout(RELAY_TRY_MS) });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          diag.lights[ip] = { ms: Date.now() - t0, tries: attempt };
+          return true;
+        } catch (err) {
+          if (attempt >= RELAY_TRIES || this._relayGens.get(key) !== gen) {
+            diag.lights[ip] = { ms: Date.now() - t0, tries: attempt, err: err.name === 'TimeoutError' ? 'timeout' : err.message };
+            return false;
+          }
+        }
+      }
     };
     // Parallel with a light stagger, same reasoning as group broadcasts
-    const failed = (await Promise.all(addresses.map((ip, i) => new Promise((resolve) => {
-      this.homey.setTimeout(() => {
-        send(ip).then(() => resolve(null), () => resolve(ip));
-      }, i * 30);
-    })))).filter(Boolean);
-    if (failed.length > 0 && this._relayGens.get(key) === gen) {
-      await Promise.all(failed.map((ip) => send(ip).catch((err) => {
-        this.error(`Relay ${key}: re-send to ${ip} failed:`, err.message);
-      })));
-    }
-    this.log(`Relay ${key}: CCT.Set ${qs} → ${addresses.length - failed.length}/${addresses.length} first-try`);
+    const results = await Promise.all(addresses.map((ip, i) => new Promise((resolve) => {
+      this.homey.setTimeout(() => send(ip).then(resolve), i * 30);
+    })));
+    const firstTry = addresses.filter((ip) => diag.lights[ip] && diag.lights[ip].tries === 1 && !diag.lights[ip].err).length;
+    const failed = addresses.filter((ip, i) => !results[i]);
+    if (failed.length > 0) this.error(`Relay ${key}: no answer from ${failed.join(', ')} after ${RELAY_TRIES} tries`);
+    this.log(`Relay ${key}: CCT.Set ${qs} → ${firstTry}/${addresses.length} first-try`);
 
     const fadeMatch = /(?:^|&)transition_duration=([\d.]+)/.exec(qs);
     const fadeMs = fadeMatch ? parseFloat(fadeMatch[1]) * 1000 : 0;
@@ -696,6 +720,7 @@ class HiluxDS8App extends Homey.App {
     for (let round = 0; round < 3 && pending.length > 0; round++) {
       await new Promise((r) => this.homey.setTimeout(r, round === 0 ? fadeMs + 900 : waitMs));
       if (this._relayGens.get(key) !== gen) return;
+      const diag = this._diagFor(key, gen);
       const results = await Promise.all(pending.map(async (ip) => {
         try {
           const r = await fetch(`http://${ip}/rpc/CCT.GetStatus?id=0`, { signal: AbortSignal.timeout(3000) });
@@ -706,6 +731,7 @@ class HiluxDS8App extends Homey.App {
         try {
           await fetch(`http://${ip}/rpc/CCT.Set?id=0&${qs}`, { signal: AbortSignal.timeout(3000) });
           this.log(`Relay verify ${key} round ${round + 1}: re-sent to ${ip}`);
+          if (diag) diag.verify.push({ ip, round: round + 1, ms: Date.now() - diag.t });
         } catch (err) {
           this.error(`Relay verify ${key}: re-send to ${ip} failed:`, err.message);
         }
@@ -713,6 +739,42 @@ class HiluxDS8App extends Homey.App {
       }));
       pending = results.filter(Boolean);
     }
+  }
+
+  _recordDiag(entry) {
+    if (!this._diag) this._diag = [];
+    this._diag.push(entry);
+    if (this._diag.length > DIAG_MAX_BURSTS) this._diag.shift();
+  }
+
+  _diagFor(key, gen) {
+    if (!this._diag) return null;
+    for (let i = this._diag.length - 1; i >= 0; i--) {
+      if (this._diag[i].key === key && this._diag[i].gen === gen) return this._diag[i];
+    }
+    return null;
+  }
+
+  // Newest first. By default only bursts where something was off: a light
+  // slower than 1 s, a re-send, a failure, or a verify rescue.
+  _renderDiag(all) {
+    const rows = (this._diag || []).slice().reverse().filter((d) => all
+      || d.verify.length > 0
+      || Object.values(d.lights).some((l) => l.ms > 1000 || l.tries > 1 || l.err));
+    const fmt = (ms) => new Date(ms).toLocaleString('en-GB', { timeZone: this.homey.clock.getTimezone() });
+    const lines = [
+      `HiluX relay timing — ${all ? 'all' : 'slow/rescued'} bursts, newest first (${(this._diag || []).length} kept since app start; ?all=1 for everything)`,
+      '',
+    ];
+    for (const d of rows) {
+      lines.push(`${fmt(d.t)}  button ${d.key}  ${d.qs}`);
+      for (const [ip, l] of Object.entries(d.lights)) {
+        lines.push(`    ${ip.padEnd(15)} ${String(l.ms).padStart(5)} ms  try ${l.tries}${l.err ? `  FAILED (${l.err})` : ''}`);
+      }
+      for (const v of d.verify) lines.push(`    ${v.ip.padEnd(15)} verify round ${v.round}: re-sent at +${v.ms} ms`);
+    }
+    if (rows.length === 0) lines.push('(nothing slow recorded)');
+    return lines.join('\n') + '\n';
   }
 
   // After a group broadcast, member lights are told to re-poll so their

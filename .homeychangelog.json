@@ -49,5 +49,8 @@
   },
   "2.12.0": {
     "en": "Lamps are hidden from HomeKit automatically; family control goes through the room groups."
+  },
+  "2.12.2": {
+    "en": "Wall-button commands re-send to a slow light after 1 s instead of 3 s; relay timing history at :4820/hilux-diag."
   }
 }
