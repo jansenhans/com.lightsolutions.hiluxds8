@@ -10,6 +10,11 @@ const COMMAND_COOLDOWN_MS = 5000; // skip mirror poll this long after a command
 const STAGGER_MS = 30; // gap between per-light commands in a broadcast
 const CAPABILITY_COMBINE_MS = 300;
 const VERIFY_TRIES = 3; // post-fade verify rounds for on/off broadcasts
+// A healthy light answers in 0.1-0.3 s: one silent for a second gets the
+// (idempotent) command again instead of stalling the broadcast for 8 s —
+// same policy as the app's wall-button relay (v2.12.2)
+const SEND_TRY_MS = 1000;
+const SEND_TRIES = 3;
 
 function homeyTemperatureToCt(temperature) {
   const clamped = Math.min(1, Math.max(0, temperature));
@@ -104,12 +109,20 @@ class HiluxGroupDevice extends Homey.Device {
     // group doesn't burst the Wi-Fi (same reasoning as settings enforcement)
     const results = await Promise.all(addresses.map((ip, i) => new Promise((resolve) => {
       this.homey.setTimeout(async () => {
-        try {
-          await new ShellyRpcClient(ip).setCct({ id: 0, ...params });
-          resolve(true);
-        } catch (err) {
-          this.error(`Broadcast to ${ip} failed:`, err.message);
-          resolve(false);
+        const client = new ShellyRpcClient(ip, { timeoutMs: SEND_TRY_MS });
+        for (let attempt = 1; ; attempt++) {
+          try {
+            await client.setCct({ id: 0, ...params });
+            if (attempt > 1) this.log(`Broadcast to ${ip} landed on try ${attempt}`);
+            resolve(true);
+            return;
+          } catch (err) {
+            if (attempt >= SEND_TRIES || gen !== this._cmdGen) {
+              this.error(`Broadcast to ${ip} failed after ${attempt} tries:`, err.message);
+              resolve(false);
+              return;
+            }
+          }
         }
       }, i * STAGGER_MS);
     })));

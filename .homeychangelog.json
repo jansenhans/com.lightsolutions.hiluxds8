@@ -52,5 +52,8 @@
   },
   "2.12.2": {
     "en": "Wall-button commands re-send to a slow light after 1 s instead of 3 s; relay timing history at :4820/hilux-diag."
+  },
+  "2.12.3": {
+    "en": "Group tiles (Homey app, Apple Home) also re-send to a slow light after 1 s instead of waiting up to 8 s."
   }
 }
