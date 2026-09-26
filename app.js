@@ -477,18 +477,18 @@ class HiluxDS8App extends Homey.App {
     }
   }
 
-  // Keep individual lamps out of HomeKit — family control goes through the
-  // group devices, one tile per room (Hans's policy, 2026-09-18). Homey
-  // injects a homekit_exclude setting into every device once HomeKit is
-  // enabled; lamps get it forced to true here. Groups are deliberately left
+  // Keep individual lamps and i4 buttons out of HomeKit — family control goes
+  // through the group devices, one tile per room (Hans's policy, 2026-09-18;
+  // buttons added 2026-09-26). Homey injects a homekit_exclude setting into
+  // every device once HomeKit is enabled; ours get it forced to true here. Groups are deliberately left
   // alone: exposed by default, and a manual hide on a group is respected.
   // Uses the same user API key as renaming (the app's own session cannot
   // write device settings).
-  async _syncHomekitExclusion(lights) {
+  async _syncHomekitExclusion(devices) {
     const key = this.homey.settings.get('api_key');
     if (!key) return; // the rename path already nags about a missing key
     const baseUrl = await this.homey.api.getLocalUrl();
-    for (const d of lights) {
+    for (const d of devices) {
       if (!d.settings || d.settings.homekit_exclude === true) continue;
       try {
         const res = await fetch(new URL(`/api/manager/devices/device/${d.id}/settings`, baseUrl), {
@@ -857,14 +857,16 @@ class HiluxDS8App extends Homey.App {
     // scripts: instant on zone moves, healed by the periodic sweep)
     await this._syncLightNames(lights, force).catch((err) => this.error('Name sync failed:', err.message));
 
-    // New lamps are hidden from HomeKit automatically (groups stay exposed)
-    await this._syncHomekitExclusion(lights).catch((err) => this.error('HomeKit sync failed:', err.message));
+    const buttons = all.filter((d) => d.driverId === appPrefix + BUTTON_DRIVER);
+
+    // New lamps and buttons are hidden from HomeKit automatically (groups
+    // stay exposed)
+    await this._syncHomekitExclusion([...lights, ...buttons]).catch((err) => this.error('HomeKit sync failed:', err.message));
 
     // Wall-display panels follow their group's membership, same lifecycle as
     // the i4 scripts (instant on relevant events, healed by the periodic sweep)
     await this._deployPanels().catch((err) => this.error('Panel deploy failed:', err.message));
 
-    const buttons = all.filter((d) => d.driverId === appPrefix + BUTTON_DRIVER);
     if (buttons.length === 0) return;
 
     // zone id -> light addresses

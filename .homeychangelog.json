@@ -64,5 +64,8 @@
   },
   "2.13.0": {
     "en": "Groups can reboot all their lights and buttons (Maintenance action and flow card) so they reconnect to the nearest Wi-Fi access point."
+  },
+  "2.13.1": {
+    "en": "i4 button devices are hidden from HomeKit automatically too; only the room groups are exposed."
   }
 }
