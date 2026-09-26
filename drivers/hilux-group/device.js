@@ -42,6 +42,16 @@ class HiluxGroupDevice extends Homey.Device {
     if (!this.hasCapability('measure_lights_on')) {
       await this.addCapability('measure_lights_on').catch(this.error);
     }
+    // Maintenance action (device settings → Maintenance): reboot the room
+    if (!this.hasCapability('button.reboot')) {
+      await this.addCapability('button.reboot').catch(this.error);
+      await this.setCapabilityOptions('button.reboot', {
+        maintenanceAction: true,
+        title: { en: 'Reboot lights and buttons' },
+        desc: { en: 'Restarts every HiluX light and i4 button in this group\'s zones, so they reconnect to the nearest Wi-Fi access point. Lights return to their current state.' },
+      }).catch(this.error);
+    }
+    this.registerCapabilityListener('button.reboot', () => this.rebootDevices());
 
     this.registerMultipleCapabilityListener(
       ['onoff', 'dim', 'light_temperature'],
@@ -62,6 +72,16 @@ class HiluxGroupDevice extends Homey.Device {
 
   async onDeleted() {
     if (this._pollInterval) this.homey.clearInterval(this._pollInterval);
+  }
+
+  async rebootDevices() {
+    const { addresses, buttonAddresses = [] } = await this._members();
+    const all = [...addresses, ...buttonAddresses];
+    if (all.length === 0) throw new Error('This group has no HiluX devices in its zones');
+    const { failed } = await this.homey.app.rebootDevices(all);
+    this.log(`Reboot: ${addresses.length} lights + ${buttonAddresses.length} buttons, failed: ${failed.join(', ') || 'none'}`);
+    if (failed.length === all.length) throw new Error('None of the devices answered — are they online?');
+    if (failed.length > 0) throw new Error(`Rebooted ${all.length - failed.length} of ${all.length}; no answer from ${failed.join(', ')}`);
   }
 
   async _members() {

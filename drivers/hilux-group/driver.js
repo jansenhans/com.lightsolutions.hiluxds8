@@ -5,6 +5,8 @@ const Homey = require('homey');
 class HiluxGroupDriver extends Homey.Driver {
   async onInit() {
     this.log('HiluX Group driver initialized');
+    this.homey.flow.getActionCard('reboot_group_devices')
+      .registerRunListener(async (args) => args.device.rebootDevices());
   }
 
   async onPair(session) {

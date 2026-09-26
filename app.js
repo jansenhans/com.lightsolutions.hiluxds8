@@ -363,7 +363,36 @@ class HiluxDS8App extends Homey.App {
       .map((id) => { const z = zones.find((x) => x.id === id); return z ? z.name : null; })
       .filter(Boolean);
 
-    return { addresses: order, members, zoneNames };
+    // i4s hosting a button for any of these zones (one i4 can serve several)
+    const buttonAddresses = sortAddresses([...new Set(all
+      .filter((d) => d.driverId === appPrefix + BUTTON_DRIVER
+        && selected.has(d.zone)
+        && d.settings && d.settings.address)
+      .map((d) => d.settings.address))]);
+
+    return { addresses: order, members, zoneNames, buttonAddresses };
+  }
+
+  // Reboot Shellys in parallel. A reboot makes a device re-scan and join the
+  // nearest Orbi — Shellys only roam on their own below -80 dBm, so after an
+  // access-point outage they can stay stuck on a distant node. Lights come
+  // back in their previous state (initial_state restore_last); i4 scripts
+  // restart on boot, and a forced sweep afterwards re-verifies them.
+  async rebootDevices(addresses) {
+    const results = await Promise.all(addresses.map(async (ip) => {
+      try {
+        const r = await fetch(`http://${ip}/rpc/Shelly.Reboot`, { signal: AbortSignal.timeout(3000) });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return null;
+      } catch (err) {
+        this.error(`Reboot of ${ip} failed:`, err.message);
+        return ip;
+      }
+    }));
+    this.homey.setTimeout(() => {
+      this._rebuildAll('after device reboot', true).catch((e) => this.error(e));
+    }, 60000);
+    return { failed: results.filter(Boolean) };
   }
 
   // Auto-rename lights to "HiLux <room> (<nr>)" so names follow zone moves.

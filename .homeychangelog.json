@@ -61,5 +61,8 @@
   },
   "2.12.5": {
     "en": "Fade settings accept any value again (e.g. 0.6 or 0.7 s were wrongly refused)."
+  },
+  "2.13.0": {
+    "en": "Groups can reboot all their lights and buttons (Maintenance action and flow card) so they reconnect to the nearest Wi-Fi access point."
   }
 }

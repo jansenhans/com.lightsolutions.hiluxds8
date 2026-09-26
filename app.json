@@ -1,6 +1,6 @@
 {
   "id": "com.lightsolutions.hiluxds8",
-  "version": "2.12.5",
+  "version": "2.13.0",
   "compatibility": ">=5.0.0",
   "sdk": 3,
   "platforms": [
@@ -198,6 +198,22 @@
             "placeholder": {
               "en": "Duration (minutes)"
             }
+          }
+        ]
+      },
+      {
+        "id": "reboot_group_devices",
+        "title": {
+          "en": "Reboot all lights and buttons in the group"
+        },
+        "hint": {
+          "en": "Restarts every HiluX light and i4 button in the group's zones so they reconnect to the nearest Wi-Fi access point (e.g. after a router update). Lights return to their current state within seconds."
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=hilux-group"
           }
         ]
       }
@@ -459,7 +475,8 @@
         "onoff",
         "dim",
         "light_temperature",
-        "measure_lights_on"
+        "measure_lights_on",
+        "button.reboot"
       ],
       "platforms": [
         "local"
@@ -523,7 +540,18 @@
           },
           "value": ""
         }
-      ]
+      ],
+      "capabilitiesOptions": {
+        "button.reboot": {
+          "maintenanceAction": true,
+          "title": {
+            "en": "Reboot lights and buttons"
+          },
+          "desc": {
+            "en": "Restarts every HiluX light and i4 button in this group's zones, so they reconnect to the nearest Wi-Fi access point. Lights return to their current state."
+          }
+        }
+      }
     }
   ],
   "capabilities": {
