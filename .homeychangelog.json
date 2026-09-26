@@ -58,5 +58,8 @@
   },
   "2.12.4": {
     "en": "Fade times below 0.5 s (which the lights reject) are raised to 0.5 s instead of silently breaking the button or group."
+  },
+  "2.12.5": {
+    "en": "Fade settings accept any value again (e.g. 0.6 or 0.7 s were wrongly refused)."
   }
 }
