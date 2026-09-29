@@ -70,5 +70,8 @@
   },
   "2.14.0": {
     "en": "Beta: per-light live connection (WebSocket) - instant brightness/colour state and faster commands, HTTP as fallback."
+  },
+  "2.14.1": {
+    "en": "Buttons never switch a room on by guess after a reboot: state check retries and asks a second light; unknown state switches off."
   }
 }
