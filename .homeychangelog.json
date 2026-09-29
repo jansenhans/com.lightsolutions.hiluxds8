@@ -88,5 +88,8 @@
   },
   "2.15.3": {
     "en": "Wall-button dim floor defaults to 3 %; buttons still on the old 5 % default move to 3 % once."
+  },
+  "2.15.4": {
+    "en": "HomeKit hiding only touches devices where the HomeKit experiment is active (preparing for the switch to Matter Bridge)."
   }
 }

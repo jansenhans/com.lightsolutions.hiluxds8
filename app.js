@@ -502,7 +502,11 @@ class HiluxDS8App extends Homey.App {
     if (!key) return; // the rename path already nags about a missing key
     const baseUrl = await this.homey.api.getLocalUrl();
     for (const d of devices) {
-      if (!d.settings || d.settings.homekit_exclude === true) continue;
+      // Only where the HomeKit experiment injected the setting — it retires
+      // in March 2027 (Matter Bridge replaces it and uses its own opt-in
+      // device list), and writing the key elsewhere would store a junk
+      // setting on every device
+      if (!d.settings || !('homekit_exclude' in d.settings) || d.settings.homekit_exclude === true) continue;
       try {
         const res = await fetch(new URL(`/api/manager/devices/device/${d.id}/settings`, baseUrl), {
           method: 'PUT',
