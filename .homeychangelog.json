@@ -76,5 +76,11 @@
   },
   "2.14.2": {
     "en": "Diagnostics page shows when and why each live connection last dropped."
+  },
+  "2.15.0": {
+    "en": "Groups have a minimum brightness (default 5 %): sliding to the bottom keeps the room lit instead of switching it off."
+  },
+  "2.15.1": {
+    "en": "Switching a group on brings lights left at 0 % up to the group minimum, so they never switch on dark."
   }
 }

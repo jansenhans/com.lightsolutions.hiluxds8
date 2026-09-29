@@ -9,6 +9,9 @@ const COMMAND_COOLDOWN_MS = 5000; // skip mirror poll this long after a command
 const STAGGER_MS = 30; // gap between per-light commands in a broadcast
 const CAPABILITY_COMBINE_MS = 300;
 const VERIFY_TRIES = 3; // post-fade verify rounds for on/off broadcasts
+// Groups paired before the setting existed have no stored value (Homey never
+// backfills manifest defaults)
+const DEFAULT_MIN_BRIGHTNESS = 5;
 // A healthy light answers in 0.1-0.3 s: one silent for a second gets the
 // (idempotent) command again instead of stalling the broadcast for 8 s —
 // same policy as the app's wall-button relay (v2.12.2)
@@ -107,8 +110,14 @@ class HiluxGroupDevice extends Homey.Device {
     const params = {};
     if ('onoff' in values) params.on = values.onoff;
     if ('dim' in values) {
-      params.brightness = Math.round(Math.min(1, Math.max(0, values.dim)) * 100);
-      params.on = values.dim > 0;
+      // Sliding to the bottom keeps the room at its minimum instead of
+      // switching it off (off stays one tap on the tile); 0 disables this
+      const floor = this._minBrightness();
+      let pct = Math.round(Math.min(1, Math.max(0, values.dim)) * 100);
+      if (floor > 0 && pct < floor) pct = floor;
+      params.brightness = pct;
+      params.on = pct > 0;
+      values = { ...values, dim: pct / 100 };
     }
     if ('light_temperature' in values) params.ct = homeyTemperatureToCt(values.light_temperature);
 
@@ -127,6 +136,11 @@ class HiluxGroupDevice extends Homey.Device {
     await this._broadcast(params);
   }
 
+  _minBrightness() {
+    const raw = this.getSetting('min_brightness');
+    return typeof raw === 'number' ? raw : DEFAULT_MIN_BRIGHTNESS;
+  }
+
   async _broadcast(params) {
     const { addresses } = await this._members();
     if (addresses.length === 0) {
@@ -141,11 +155,21 @@ class HiluxGroupDevice extends Homey.Device {
     // Live connections are used where lights have one, HTTP otherwise.
     const rpc = toRpcParams(params);
     const liveMap = this.homey.app._lightDevicesByAddress();
+    // A plain "on" keeps each light's own brightness — except a light left
+    // at (near) zero, e.g. by an earlier slide to the bottom, which would
+    // switch on dark. Those come on at the group minimum.
+    const onFloor = Math.max(1, this._minBrightness());
+    const rpcFor = (ip) => {
+      if (rpc.on !== true || rpc.brightness !== undefined) return rpc;
+      const dev = liveMap.get(ip);
+      const dim = dev ? dev.getCapabilityValue('dim') : null;
+      return typeof dim === 'number' && dim * 100 < onFloor ? { ...rpc, brightness: onFloor } : rpc;
+    };
     const results = await Promise.all(addresses.map((ip, i) => new Promise((resolve) => {
       this.homey.setTimeout(async () => {
         for (let attempt = 1; ; attempt++) {
           try {
-            await this.homey.app.lightCall(ip, 'CCT.Set', rpc, SEND_TRY_MS, liveMap);
+            await this.homey.app.lightCall(ip, 'CCT.Set', rpcFor(ip), SEND_TRY_MS, liveMap);
             if (attempt > 1) this.log(`Broadcast to ${ip} landed on try ${attempt}`);
             resolve(true);
             return;
