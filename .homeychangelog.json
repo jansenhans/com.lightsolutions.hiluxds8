@@ -82,5 +82,8 @@
   },
   "2.15.1": {
     "en": "Switching a group on brings lights left at 0 % up to the group minimum, so they never switch on dark."
+  },
+  "2.15.2": {
+    "en": "Group minimum brightness defaults to 3 %."
   }
 }

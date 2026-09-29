@@ -1,6 +1,6 @@
 {
   "id": "com.lightsolutions.hiluxds8",
-  "version": "2.15.1",
+  "version": "2.15.2",
   "compatibility": ">=5.0.0",
   "sdk": 3,
   "platforms": [
@@ -549,7 +549,7 @@
           "hint": {
             "en": "The brightness slider never goes below this: sliding to the bottom keeps the room lit at this level instead of switching it off (switch off by tapping the tile). 0 = sliding to the bottom switches off."
           },
-          "value": 5,
+          "value": 3,
           "min": 0,
           "max": 50,
           "units": {

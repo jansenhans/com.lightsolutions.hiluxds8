@@ -11,7 +11,7 @@ const CAPABILITY_COMBINE_MS = 300;
 const VERIFY_TRIES = 3; // post-fade verify rounds for on/off broadcasts
 // Groups paired before the setting existed have no stored value (Homey never
 // backfills manifest defaults)
-const DEFAULT_MIN_BRIGHTNESS = 5;
+const DEFAULT_MIN_BRIGHTNESS = 3;
 // A healthy light answers in 0.1-0.3 s: one silent for a second gets the
 // (idempotent) command again instead of stalling the broadcast for 8 s —
 // same policy as the app's wall-button relay (v2.12.2)
