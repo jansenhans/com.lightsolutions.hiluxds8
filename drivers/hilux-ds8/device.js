@@ -2,6 +2,7 @@
 
 const Homey = require('homey');
 const ShellyRpcClient = require('../../lib/ShellyRpcClient');
+const ShellyWsClient = require('../../lib/ShellyWsClient');
 
 const CT_MIN = 2200;
 const CT_MAX = 6000;
@@ -9,6 +10,10 @@ const POLL_INTERVAL_MS = 15000;
 const COMMAND_COOLDOWN_MS = 3000; // skip poll this long after a command
 const UNAVAILABLE_AFTER_FAILURES = 3;
 const ENFORCE_INTERVAL_MS = 60 * 60 * 1000; // re-check enforced settings hourly
+// With a live connection the light pushes every change itself; polling
+// drops to a slow backstop (and resumes fully the moment the socket drops)
+const LIVE_BACKSTOP_POLL_MS = 5 * 60 * 1000;
+const LIVE_CALL_TIMEOUT_MS = 2000;
 // Fallbacks when the device predates these settings (Homey doesn't backfill
 // manifest defaults into existing devices' settings stores)
 const DEFAULT_TRANSITION_S = 1;
@@ -46,6 +51,7 @@ class HiluxDS8Device extends Homey.Device {
     }
 
     this.client = new ShellyRpcClient(this.address);
+    this._syncLive(settings);
     await this._startPolling();
 
     // A light appearing (or reappearing) can change a button cluster
@@ -127,18 +133,72 @@ class HiluxDS8Device extends Homey.Device {
       // Skip poll if a command was sent recently — avoids overwriting optimistic state
       const msSinceCommand = Date.now() - this._lastCommandAt;
       if (msSinceCommand < COMMAND_COOLDOWN_MS) return;
+      if (this.isLive() && Date.now() - (this._lastPollAt || 0) < LIVE_BACKSTOP_POLL_MS) return;
       this.poll().catch((err) => this.error('Poll failed:', err));
     }, POLL_INTERVAL_MS);
+  }
+
+  // --- live connection (setting "live_connection", beta) --------------------
+
+  // Start, restart (address change) or stop the persistent WebSocket to the
+  // light to match the settings. Settings are passed in because inside
+  // onSettings the new values aren't persisted yet.
+  _syncLive(settings = this.getSettings()) {
+    const wanted = settings.live_connection === true && this.address;
+    if (this._live && (!wanted || this._live.ip !== this.address)) {
+      this._live.stop();
+      this._live.removeAllListeners();
+      this._live = null;
+    }
+    if (!wanted || this._live) return;
+    const live = new ShellyWsClient(this.address, { log: this.log.bind(this), error: this.error.bind(this) });
+    live.on('status', (key, status) => {
+      if (key === 'cct:0') this._applyStatus(status).catch(this.error);
+    });
+    live.on('connected', () => {
+      this.log('Live connection up:', this.address);
+      if (!this.getAvailable()) {
+        this.setAvailable().catch(this.error);
+        this._enforceWithRetry();
+      }
+    });
+    live.start();
+    this._live = live;
+  }
+
+  isLive() {
+    return !!(this._live && this._live.connected);
+  }
+
+  liveStats() {
+    return this._live ? { connected: this._live.connected, ...this._live.stats } : null;
+  }
+
+  // RPC over the open socket; rejects when there is none (callers fall back
+  // to HTTP)
+  liveCall(method, params, timeoutMs = LIVE_CALL_TIMEOUT_MS) {
+    if (!this.isLive()) return Promise.reject(new Error('no live connection'));
+    return this._live.call(method, params, timeoutMs);
+  }
+
+  _stopLive() {
+    if (this._live) {
+      this._live.stop();
+      this._live.removeAllListeners();
+      this._live = null;
+    }
   }
 
   async onUninit() {
     if (this._pollInterval) this.homey.clearInterval(this._pollInterval);
     if (this._enforceInterval) this.homey.clearInterval(this._enforceInterval);
+    this._stopLive();
   }
 
   async onDeleted() {
     if (this._pollInterval) this.homey.clearInterval(this._pollInterval);
     if (this._enforceInterval) this.homey.clearInterval(this._enforceInterval);
+    this._stopLive();
     if (this.homey.app.scheduleRebuild) this.homey.app.scheduleRebuild('light deleted');
   }
 
@@ -151,8 +211,13 @@ class HiluxDS8Device extends Homey.Device {
       }
       this.client = new ShellyRpcClient(this.address);
       this.log('Address updated to:', this.address);
+      this._syncLive(newSettings);
       await this._startPolling();
       if (this.homey.app.scheduleRebuild) this.homey.app.scheduleRebuild('light address changed');
+    }
+    if (changedKeys.includes('live_connection')) {
+      this._syncLive(newSettings);
+      if (!newSettings.live_connection) this.poll().catch(() => {});
     }
     if (changedKeys.includes('default_transition') || changedKeys.includes('min_on_toggle')) {
       // Settings are persisted right after onSettings resolves — apply then
@@ -172,6 +237,21 @@ class HiluxDS8Device extends Homey.Device {
       throw err;
     }
     this._pollFailures = 0;
+    this._lastPollAt = Date.now();
+    await this._applyStatus(status);
+    if (!this.getAvailable()) {
+      await this.setAvailable().catch(this.error);
+      // Recovery from unavailable often means the light rebooted (e.g. a
+      // firmware update) — exactly when on-device settings get reset.
+      this._enforceWithRetry();
+    }
+  }
+
+  // Mirror a (possibly partial) CCT status onto the capabilities — from a
+  // poll or a live NotifyStatus. During a fade the light reports its
+  // transition target, which is what the tile should show.
+  async _applyStatus(raw) {
+    const status = raw.transition && raw.transition.target ? { ...raw, ...raw.transition.target } : raw;
     const before = [
       this.getCapabilityValue('onoff'),
       this.getCapabilityValue('dim'),
@@ -193,17 +273,23 @@ class HiluxDS8Device extends Homey.Device {
     if (after !== before && this.homey.app.scheduleGroupTileRefresh) {
       this.homey.app.scheduleGroupTileRefresh();
     }
-    if (!this.getAvailable()) {
-      await this.setAvailable().catch(this.error);
-      // Recovery from unavailable often means the light rebooted (e.g. a
-      // firmware update) — exactly when on-device settings get reset.
-      this._enforceWithRetry();
-    }
   }
 
   async _setCct(params) {
     if (!this.client) throw new Error('Device not configured — set the IP address in device settings');
     this._lastCommandAt = Date.now();
+    if (this.isLive()) {
+      const rpc = { id: 0 };
+      if (typeof params.on === 'boolean') rpc.on = params.on;
+      if (typeof params.brightness === 'number') rpc.brightness = params.brightness;
+      if (typeof params.ct === 'number') rpc.ct = params.ct;
+      if (typeof params.transitionDuration === 'number') rpc.transition_duration = params.transitionDuration;
+      try {
+        return await this.liveCall('CCT.Set', rpc);
+      } catch (err) {
+        this.log('Live CCT.Set failed, falling back to HTTP:', err.message);
+      }
+    }
     return this.client.setCct({ id: 0, ...params });
   }
 

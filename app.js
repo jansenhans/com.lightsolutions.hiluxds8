@@ -28,6 +28,19 @@ const PUSH_PORT = 4820; // local HTTP receiver for light-state push
 const RELAY_TRY_MS = 1000;
 const RELAY_TRIES = 3;
 const DIAG_MAX_BURSTS = 300; // relay timing history served at /hilux-diag
+
+// "on=false&transition_duration=1.5" → { id: 0, on: false, transition_duration: 1.5 }
+function qsToParams(qs) {
+  const params = { id: 0 };
+  for (const pair of qs.split('&')) {
+    const [k, v] = pair.split('=');
+    if (!k) continue;
+    if (v === 'true' || v === 'false') params[k] = v === 'true';
+    else if (v !== '' && !Number.isNaN(Number(v))) params[k] = Number(v);
+    else params[k] = v;
+  }
+  return params;
+}
 const GROUP_REFRESH_DEBOUNCE_MS = 700; // lets a nudged poll land first
 
 function num(value, fallback) {
@@ -650,6 +663,21 @@ class HiluxDS8App extends Homey.App {
     }
   }
 
+  // One RPC to a light: over its live connection when it has one (no TCP
+  // setup), otherwise — or if the socket call fails — plain HTTP.
+  async lightCall(ip, method, params, timeoutMs, liveMap = null) {
+    const dev = (liveMap || this._lightDevicesByAddress()).get(ip);
+    if (dev && typeof dev.isLive === 'function' && dev.isLive()) {
+      try {
+        return { result: await dev.liveCall(method, params, timeoutMs), via: 'ws' };
+      } catch (err) { /* socket trouble — HTTP below */ }
+    }
+    const qs = Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+    const r = await fetch(`http://${ip}/rpc/${method}?${qs}`, { signal: AbortSignal.timeout(timeoutMs) });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return { result: await r.json(), via: 'http' };
+  }
+
   _lightDevicesByAddress() {
     const map = new Map();
     try {
@@ -702,12 +730,13 @@ class HiluxDS8App extends Homey.App {
     const t0 = Date.now();
     const diag = { t: t0, key, gen, qs, lights: {}, verify: [] };
     this._recordDiag(diag);
+    const params = qsToParams(qs);
+    const liveMap = this._lightDevicesByAddress();
     const send = async (ip) => {
       for (let attempt = 1; ; attempt++) {
         try {
-          const r = await fetch(`http://${ip}/rpc/CCT.Set?id=0&${qs}`, { signal: AbortSignal.timeout(RELAY_TRY_MS) });
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          diag.lights[ip] = { ms: Date.now() - t0, tries: attempt };
+          const { via } = await this.lightCall(ip, 'CCT.Set', params, RELAY_TRY_MS, liveMap);
+          diag.lights[ip] = { ms: Date.now() - t0, tries: attempt, via };
           return true;
         } catch (err) {
           if (attempt >= RELAY_TRIES || this._relayGens.get(key) !== gen) {
@@ -750,15 +779,15 @@ class HiluxDS8App extends Homey.App {
       await new Promise((r) => this.homey.setTimeout(r, round === 0 ? fadeMs + 900 : waitMs));
       if (this._relayGens.get(key) !== gen) return;
       const diag = this._diagFor(key, gen);
+      const params = qsToParams(qs);
       const results = await Promise.all(pending.map(async (ip) => {
         try {
-          const r = await fetch(`http://${ip}/rpc/CCT.GetStatus?id=0`, { signal: AbortSignal.timeout(3000) });
-          const st = await r.json();
+          const { result: st } = await this.lightCall(ip, 'CCT.GetStatus', { id: 0 }, 3000);
           if (st && st.output === wantOn) return null;
         } catch (err) { /* unreachable — likely missed the burst too */ }
         if (this._relayGens.get(key) !== gen) return null;
         try {
-          await fetch(`http://${ip}/rpc/CCT.Set?id=0&${qs}`, { signal: AbortSignal.timeout(3000) });
+          await this.lightCall(ip, 'CCT.Set', params, 3000);
           this.log(`Relay verify ${key} round ${round + 1}: re-sent to ${ip}`);
           if (diag) diag.verify.push({ ip, round: round + 1, ms: Date.now() - diag.t });
         } catch (err) {
@@ -798,11 +827,23 @@ class HiluxDS8App extends Homey.App {
     for (const d of rows) {
       lines.push(`${fmt(d.t)}  button ${d.key}  ${d.qs}`);
       for (const [ip, l] of Object.entries(d.lights)) {
-        lines.push(`    ${ip.padEnd(15)} ${String(l.ms).padStart(5)} ms  try ${l.tries}${l.err ? `  FAILED (${l.err})` : ''}`);
+        lines.push(`    ${ip.padEnd(15)} ${String(l.ms).padStart(5)} ms  try ${l.tries}${l.via ? ` via ${l.via}` : ''}${l.err ? `  FAILED (${l.err})` : ''}`);
       }
       for (const v of d.verify) lines.push(`    ${v.ip.padEnd(15)} verify round ${v.round}: re-sent at +${v.ms} ms`);
     }
     if (rows.length === 0) lines.push('(nothing slow recorded)');
+
+    // Live connections (lights with the beta setting on)
+    const live = [...this._lightDevicesByAddress().entries()]
+      .map(([ip, dev]) => [ip, dev, typeof dev.liveStats === 'function' ? dev.liveStats() : null])
+      .filter(([, , st]) => st);
+    lines.push('', `Live connections: ${live.length} light(s) with the setting on`);
+    const order = sortAddresses(live.map(([ip]) => ip));
+    live.sort((x, y) => order.indexOf(x[0]) - order.indexOf(y[0]));
+    for (const [ip, dev, st] of live) {
+      lines.push(`    ${ip.padEnd(15)} ${st.connected ? 'UP  ' : 'DOWN'}  connects ${st.connects}  drops ${st.drops}`
+        + `${st.since ? `  up since ${fmt(st.since)}` : ''}  ${dev.getName()}`);
+    }
     return lines.join('\n') + '\n';
   }
 

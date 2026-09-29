@@ -1,6 +1,6 @@
 {
   "id": "com.lightsolutions.hiluxds8",
-  "version": "2.13.1",
+  "version": "2.14.0",
   "compatibility": ">=5.0.0",
   "sdk": 3,
   "platforms": [
@@ -290,6 +290,25 @@
               "step": 1,
               "units": {
                 "en": "%"
+              }
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "label": {
+            "en": "Connection"
+          },
+          "children": [
+            {
+              "id": "live_connection",
+              "type": "checkbox",
+              "value": false,
+              "label": {
+                "en": "Live connection (beta)"
+              },
+              "hint": {
+                "en": "Keep a permanent connection open to this light: state changes (including brightness and colour) show up instantly and commands skip the connection setup. HTTP stays as the fallback, so the light keeps working if the connection drops."
               }
             }
           ]

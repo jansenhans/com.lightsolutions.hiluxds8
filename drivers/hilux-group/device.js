@@ -1,7 +1,6 @@
 'use strict';
 
 const Homey = require('homey');
-const ShellyRpcClient = require('../../lib/ShellyRpcClient');
 
 const CT_MIN = 2200;
 const CT_MAX = 6000;
@@ -15,6 +14,16 @@ const VERIFY_TRIES = 3; // post-fade verify rounds for on/off broadcasts
 // same policy as the app's wall-button relay (v2.12.2)
 const SEND_TRY_MS = 1000;
 const SEND_TRIES = 3;
+
+// Group params ({ on, brightness, ct, transitionDuration }) → CCT.Set params
+function toRpcParams(params) {
+  const rpc = { id: 0 };
+  if (typeof params.on === 'boolean') rpc.on = params.on;
+  if (typeof params.brightness === 'number') rpc.brightness = params.brightness;
+  if (typeof params.ct === 'number') rpc.ct = params.ct;
+  if (typeof params.transitionDuration === 'number') rpc.transition_duration = params.transitionDuration;
+  return rpc;
+}
 
 function homeyTemperatureToCt(temperature) {
   const clamped = Math.min(1, Math.max(0, temperature));
@@ -128,13 +137,15 @@ class HiluxGroupDevice extends Homey.Device {
     const gen = this._cmdGen;
 
     // One shared value, near-simultaneous, lightly staggered so a large
-    // group doesn't burst the Wi-Fi (same reasoning as settings enforcement)
+    // group doesn't burst the Wi-Fi (same reasoning as settings enforcement).
+    // Live connections are used where lights have one, HTTP otherwise.
+    const rpc = toRpcParams(params);
+    const liveMap = this.homey.app._lightDevicesByAddress();
     const results = await Promise.all(addresses.map((ip, i) => new Promise((resolve) => {
       this.homey.setTimeout(async () => {
-        const client = new ShellyRpcClient(ip, { timeoutMs: SEND_TRY_MS });
         for (let attempt = 1; ; attempt++) {
           try {
-            await client.setCct({ id: 0, ...params });
+            await this.homey.app.lightCall(ip, 'CCT.Set', rpc, SEND_TRY_MS, liveMap);
             if (attempt > 1) this.log(`Broadcast to ${ip} landed on try ${attempt}`);
             resolve(true);
             return;
@@ -190,14 +201,15 @@ class HiluxGroupDevice extends Homey.Device {
     for (let round = 0; round < VERIFY_TRIES && pending.length > 0; round++) {
       await new Promise((r) => this.homey.setTimeout(r, round === 0 ? fadeMs + 900 : waitMs));
       if (gen !== this._cmdGen) return;
+      const rpc = toRpcParams(params);
       const results = await Promise.all(pending.map(async (ip) => {
         try {
-          const st = await new ShellyRpcClient(ip).getCctStatus();
+          const { result: st } = await this.homey.app.lightCall(ip, 'CCT.GetStatus', { id: 0 }, 3000);
           if (st && st.output === params.on) return null;
         } catch (err) { /* unreachable — likely missed the broadcast too */ }
         if (gen !== this._cmdGen) return null;
         try {
-          await new ShellyRpcClient(ip).setCct({ id: 0, ...params });
+          await this.homey.app.lightCall(ip, 'CCT.Set', rpc, 3000);
           this.log(`Verify round ${round + 1}: re-sent ${JSON.stringify(params)} to ${ip}`);
         } catch (err) {
           this.error(`Verify re-send to ${ip} failed:`, err.message);

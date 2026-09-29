@@ -67,5 +67,8 @@
   },
   "2.13.1": {
     "en": "i4 button devices are hidden from HomeKit automatically too; only the room groups are exposed."
+  },
+  "2.14.0": {
+    "en": "Beta: per-light live connection (WebSocket) - instant brightness/colour state and faster commands, HTTP as fallback."
   }
 }
