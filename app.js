@@ -940,7 +940,7 @@ class HiluxDS8App extends Homey.App {
       perI4.get(s.address)[input] = {
         lights: zoneLights,
         dimRate: num(s.dim_rate, 5),
-        dimFloor: num(s.dim_floor, 5),
+        dimFloor: num(s.dim_floor, 3),
         ctSweepS: num(s.ct_sweep_s, 5),
         presetDouble: num(s.preset_double, 20),
         presetTriple: num(s.preset_triple, 50),

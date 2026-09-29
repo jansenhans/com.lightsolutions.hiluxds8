@@ -85,5 +85,8 @@
   },
   "2.15.2": {
     "en": "Group minimum brightness defaults to 3 %."
+  },
+  "2.15.3": {
+    "en": "Wall-button dim floor defaults to 3 %; buttons still on the old 5 % default move to 3 % once."
   }
 }
