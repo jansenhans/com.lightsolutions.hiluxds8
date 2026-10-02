@@ -118,5 +118,8 @@
   },
   "2.18.0": {
     "en": "Wall dashboard: master tile dims and recolours all rooms that are on (tap = all off); swipe left/right on any tile changes its colour."
+  },
+  "2.18.1": {
+    "en": "Wall dashboards: consistent room-name sizes on phones (mobile font boosting disabled)."
   }
 }
