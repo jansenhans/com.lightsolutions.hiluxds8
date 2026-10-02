@@ -702,10 +702,12 @@ class HiluxDS8App extends Homey.App {
       }
       if (action3 === 'state') return json(members.map((g) => this._panelState(g)));
       if (action3 === 'presence') {
-        // Motion at any wall display counts (area pages aren't tied to one)
-        const recent = this._panelMotionAt
-          && [...this._panelMotionAt.values()].some((t) => Date.now() - t < 10000);
-        return json({ present: !!recent });
+        // The asking display's own motion when we know it (the X2's page
+        // and its Shelly service share an IP); otherwise any display's
+        const seen = this._panelMotionAt || new Map();
+        const fresh = (t) => Date.now() - (t || 0) < 10000;
+        const present = seen.has(caller) ? fresh(seen.get(caller)) : [...seen.values()].some(fresh);
+        return json({ present });
       }
       res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('unknown action'); return;
     }

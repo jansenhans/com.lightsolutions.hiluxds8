@@ -121,5 +121,11 @@
   },
   "2.18.1": {
     "en": "Wall dashboards: consistent room-name sizes on phones (mobile font boosting disabled)."
+  },
+  "2.18.2": {
+    "en": "Wall dashboards: screensaver clock fills the screen width."
+  },
+  "2.18.3": {
+    "en": "Multi-room dashboard wakes only on its own display's motion."
   }
 }
