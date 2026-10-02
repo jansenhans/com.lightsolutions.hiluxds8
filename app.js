@@ -204,7 +204,11 @@ class HiluxDS8App extends Homey.App {
         req.on('data', (c) => { body += c; if (body.length > 65536) req.destroy(); });
         req.on('end', () => {
           let type = '';
-          try { type = (JSON.parse(body || '{}').type) || ''; } catch (e) { /* ignore */ }
+          let msg = {};
+          try { msg = JSON.parse(body || '{}'); type = msg.type || ''; } catch (e) { /* ignore */ }
+          if (this._reqLog && this._reqLog.length) {
+            this._reqLog[this._reqLog.length - 1].line += ` type=${type} ${JSON.stringify(msg.data || '').slice(0, 120)}`;
+          }
           let reply = {};
           if (type === 'get_config') reply = this._haConfig();
           else if (type === 'get_zones') reply = [];
