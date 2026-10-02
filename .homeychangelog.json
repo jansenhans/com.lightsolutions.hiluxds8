@@ -103,5 +103,8 @@
   },
   "2.17.0": {
     "en": "Multi-room wall dashboard (Living & Kitchen): room tiles with tap-to-toggle and swipe-to-dim; each screen remembers which page it shows."
+  },
+  "2.17.1": {
+    "en": "Wall dashboards reload themselves when the app is updated."
   }
 }

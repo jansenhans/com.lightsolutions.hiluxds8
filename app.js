@@ -626,6 +626,7 @@ class HiluxDS8App extends Homey.App {
       ));
     }
     if (parts[1] === 'weather') return json(await this._getWeather());
+    if (parts[1] === 'version') return json({ version: this.homey.manifest.version });
 
     // Remember which page this screen shows at its root (the display's
     // WebView can't be told a URL; it always opens "/")
