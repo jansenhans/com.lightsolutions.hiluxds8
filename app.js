@@ -30,6 +30,14 @@ const RELAY_TRIES = 3;
 const DIAG_MAX_BURSTS = 300; // relay timing history served at /hilux-diag
 
 // "on=false&transition_duration=1.5" → { id: 0, on: false, transition_duration: 1.5 }
+// A group's wall displays: "panel_address" holds one or more IPs, separated
+// by commas or spaces (several displays may show the same room)
+function panelAddresses(group) {
+  return String(group.getSetting('panel_address') || '')
+    .split(/[\s,;]+/)
+    .filter((ip) => /^\d+\.\d+\.\d+\.\d+$/.test(ip));
+}
+
 function qsToParams(qs) {
   const params = { id: 0 };
   for (const pair of qs.split('&')) {
@@ -216,8 +224,25 @@ class HiluxDS8App extends Homey.App {
         // Prefer the group whose panel_address matches the caller; fall back
         // to the only panel-carrying group (the display's WebView traffic can
         // originate from a different IP than its Shelly service)
-        const withPanel = groups.filter((g) => (g.getSetting('panel_address') || '').trim() !== '');
-        const dev = withPanel.find((g) => g.getSetting('panel_address').trim() === ip)
+        // A screen's own choice (made on the /panel picker) wins
+        const choice = (this.homey.settings.get('panel_choices') || {})[ip];
+        if (choice && choice.startsWith('area:')) {
+          const area = this._panelAreas(groups).find((a) => a.id === choice.slice(5));
+          if (area) {
+            const members = area.groups.map((gid) => groups.find((g) => String(g.getData().id) === gid)).filter(Boolean);
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(PanelPage.renderArea({
+              id: area.id, name: area.name,
+              rooms: members.map((g) => ({ id: String(g.getData().id), name: g.getName() })),
+            }));
+            return;
+          }
+        }
+        const chosen = choice && choice.startsWith('group:')
+          ? groups.find((g) => String(g.getData().id) === choice.slice(6)) : null;
+        const withPanel = groups.filter((g) => panelAddresses(g).length > 0);
+        const dev = chosen
+          || withPanel.find((g) => panelAddresses(g).includes(ip))
           || (withPanel.length === 1 ? withPanel[0] : null);
         res.writeHead(dev ? 200 : 302, dev
           ? { 'Content-Type': 'text/html; charset=utf-8' }
@@ -553,6 +578,36 @@ class HiluxDS8App extends Homey.App {
   // /panel/<id> serves the page, /panel/<id>/state|set are its JSON API.
   // Commands reuse the group's own capability path, so they behave exactly
   // like taps on the Homey group tile.
+  _panelState(dev) {
+    const t = dev.getCapabilityValue('light_temperature');
+    return {
+      id: String(dev.getData().id),
+      name: dev.getName(),
+      on: dev.getCapabilityValue('onoff') === true,
+      b: Math.round((dev.getCapabilityValue('dim') || 0.5) * 100),
+      ct: Math.round(CT_MAX - (typeof t === 'number' ? t : 0.75) * (CT_MAX - CT_MIN)),
+    };
+  }
+
+  // Multi-room pages for wall displays: app setting "panel_areas" =
+  // [{ id, name, groups: [groupDataId, ...] }]. Seeded once with the living
+  // and kitchen area (Hans, 2026-10-02); editable later via the settings API.
+  _panelAreas(groups) {
+    let areas = this.homey.settings.get('panel_areas');
+    if (!Array.isArray(areas)) {
+      const wanted = ['living room front', 'living room middle', 'living room back', 'living room connection',
+        'kitchen main', 'kitchen sink', 'dining room'];
+      const ids = wanted
+        .map((n) => groups.find((g) => g.getName().trim().toLowerCase() === n))
+        .filter(Boolean)
+        .map((g) => String(g.getData().id));
+      if (ids.length === 0) return [];
+      areas = [{ id: 'living-kitchen', name: 'Living & Kitchen', groups: ids }];
+      this.homey.settings.set('panel_areas', areas);
+    }
+    return areas;
+  }
+
   async _handlePanel(req, res) {
     const u = new URL(req.url, 'http://localhost');
     const parts = u.pathname.split('/').filter(Boolean);
@@ -561,42 +616,83 @@ class HiluxDS8App extends Homey.App {
 
     let groups = [];
     try { groups = this.homey.drivers.getDriver(GROUP_DRIVER).getDevices(); } catch (e) { /* driver not ready */ }
+    const caller = (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+    const areas = this._panelAreas(groups);
 
     if (parts.length === 1) {
-      return html(PanelPage.renderIndex(groups.map((g) => ({ id: String(g.getData().id), name: g.getName() }))));
+      return html(PanelPage.renderIndex(
+        groups.map((g) => ({ id: String(g.getData().id), name: g.getName() })),
+        areas.map((a) => ({ id: a.id, name: a.name })),
+      ));
     }
     if (parts[1] === 'weather') return json(await this._getWeather());
+
+    // Remember which page this screen shows at its root (the display's
+    // WebView can't be told a URL; it always opens "/")
+    if (parts[1] === 'use') {
+      const target = u.searchParams.get('target') || '';
+      const choices = this.homey.settings.get('panel_choices') || {};
+      if (/^(area|group):[\w-]+$/.test(target)) choices[caller] = target;
+      else delete choices[caller];
+      this.homey.settings.set('panel_choices', choices);
+      this.log(`Panel choice for ${caller}: ${target || '(cleared)'}`);
+      res.writeHead(302, { Location: '/' });
+      res.end();
+      return;
+    }
+
+    if (parts[1] === 'area') {
+      const area = areas.find((a) => a.id === parts[2]);
+      if (!area) { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('unknown area'); return; }
+      const members = area.groups.map((gid) => groups.find((g) => String(g.getData().id) === gid)).filter(Boolean);
+      const action3 = parts[3] || 'page';
+      if (action3 === 'page') {
+        return html(PanelPage.renderArea({
+          id: area.id, name: area.name,
+          rooms: members.map((g) => ({ id: String(g.getData().id), name: g.getName() })),
+        }));
+      }
+      if (action3 === 'state') return json(members.map((g) => this._panelState(g)));
+      if (action3 === 'presence') {
+        // Motion at any wall display counts (area pages aren't tied to one)
+        const recent = this._panelMotionAt
+          && [...this._panelMotionAt.values()].some((t) => Date.now() - t < 10000);
+        return json({ present: !!recent });
+      }
+      res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('unknown action'); return;
+    }
     const dev = groups.find((g) => String(g.getData().id) === parts[1]);
     if (!dev) { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('unknown group'); return; }
 
     const action = parts[2] || 'page';
-    if (action === 'page') return html(PanelPage.render({ id: parts[1], name: dev.getName() }));
-
-    if (action === 'state') {
-      const t = dev.getCapabilityValue('light_temperature');
-      return json({
-        name: dev.getName(),
-        on: dev.getCapabilityValue('onoff') === true,
-        b: Math.round((dev.getCapabilityValue('dim') || 0.5) * 100),
-        ct: Math.round(CT_MAX - (typeof t === 'number' ? t : 0.75) * (CT_MAX - CT_MIN)),
-      });
+    if (action === 'page') {
+      // Back link only to our own area pages (no open redirect)
+      const back = u.searchParams.get('back');
+      return html(PanelPage.render({
+        id: parts[1], name: dev.getName(), back: back && /^\/panel\/area\/[\w-]+$/.test(back) ? back : null,
+      }));
     }
+
+    if (action === 'state') return json(this._panelState(dev));
     if (action === 'presence') {
       // Used by the panel page to dismiss its screensaver. Primary signal:
       // the display's own motion webhook (see /panel-motion); fallback: the
       // occupancy sensor polled via RPC (a stub on some hardware).
-      const ip = (dev.getSetting('panel_address') || '').trim();
-      if (!ip) return json({ present: false });
-      if (this._panelMotionAt && Date.now() - (this._panelMotionAt.get(ip) || 0) < 10000) {
+      // With several displays on one group, motion at any of them counts
+      const ips = panelAddresses(dev);
+      if (ips.length === 0) return json({ present: false });
+      if (this._panelMotionAt && ips.some((ip) => Date.now() - (this._panelMotionAt.get(ip) || 0) < 10000)) {
         return json({ present: true });
       }
-      try {
-        const r = await fetch(`http://${ip}/rpc/Occupancy.GetStatus?id=0`, { signal: AbortSignal.timeout(2000) });
-        const j = await r.json();
-        return json({ present: j.value === true });
-      } catch (e) {
-        return json({ present: false });
-      }
+      const polls = await Promise.all(ips.map(async (ip) => {
+        try {
+          const r = await fetch(`http://${ip}/rpc/Occupancy.GetStatus?id=0`, { signal: AbortSignal.timeout(2000) });
+          return (await r.json()).value === true;
+        } catch (e) {
+          return false;
+        }
+      }));
+      return json({ present: polls.some(Boolean) });
     }
     if (action === 'set') {
       const values = {};
@@ -649,21 +745,23 @@ class HiluxDS8App extends Homey.App {
       return;
     }
     for (const g of groups) {
-      const ip = (g.getSetting('panel_address') || '').trim();
-      if (!/^\d+\.\d+\.\d+\.\d+$/.test(ip)) continue;
-      try {
-        const { addresses } = await this.resolveGroupAddresses(g.getStoreValue('zoneIds') || []);
-        if (addresses.length === 0) {
-          this.log(`Panel ${ip}: group "${g.getName()}" has no lights — skipped`);
-          continue;
-        }
-        const fade = num(g.getSetting('fade_s'), 1.5) || 1.5;
-        const base = await this.getPushBaseUrl();
-        const motionUrl = base.replace('/hilux-push/', `/panel-motion/${ip}`);
-        await PanelDeployer.deploy(ip, { name: g.getName(), lights: addresses, fade, motionUrl }, (m) => this.log(m));
-      } catch (err) {
-        this.error(`Panel deploy to ${ip} failed:`, err.message);
+      for (const ip of panelAddresses(g)) await this._deployPanel(g, ip);
+    }
+  }
+
+  async _deployPanel(g, ip) {
+    try {
+      const { addresses } = await this.resolveGroupAddresses(g.getStoreValue('zoneIds') || []);
+      if (addresses.length === 0) {
+        this.log(`Panel ${ip}: group "${g.getName()}" has no lights — skipped`);
+        return;
       }
+      const fade = num(g.getSetting('fade_s'), 1.5) || 1.5;
+      const base = await this.getPushBaseUrl();
+      const motionUrl = base.replace('/hilux-push/', `/panel-motion/${ip}`);
+      await PanelDeployer.deploy(ip, { name: g.getName(), lights: addresses, fade, motionUrl }, (m) => this.log(m));
+    } catch (err) {
+      this.error(`Panel deploy to ${ip} failed:`, err.message);
     }
   }
 

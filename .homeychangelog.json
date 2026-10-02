@@ -97,5 +97,11 @@
   },
   "2.15.6": {
     "en": "Wall Display panel no longer creates duplicate controls when the display is slow to answer."
+  },
+  "2.16.0": {
+    "en": "A group can drive several Wall Displays (comma-separated panel addresses)."
+  },
+  "2.17.0": {
+    "en": "Multi-room wall dashboard (Living & Kitchen): room tiles with tap-to-toggle and swipe-to-dim; each screen remembers which page it shows."
   }
 }
