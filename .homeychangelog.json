@@ -106,5 +106,11 @@
   },
   "2.17.1": {
     "en": "Wall dashboards reload themselves when the app is updated."
+  },
+  "2.17.2": {
+    "en": "Diagnostics: recent display/browser requests at /hilux-diag?req=1."
+  },
+  "2.17.3": {
+    "en": "Wall Display X2 support: answer the Home Assistant app registration so the dashboard loads."
   }
 }

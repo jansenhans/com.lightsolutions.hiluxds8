@@ -110,6 +110,7 @@ class HiluxDS8App extends Homey.App {
     this._groupRefreshTimer = null;
     this._pushServer = http.createServer((req, res) => {
       const path = (req.url || '').split('?')[0];
+      this._logRequest(req, path);
       const m = /^\/hilux-push\/(\d+\.\d+\.\d+\.\d+)$/.exec(path);
       if (m) {
         res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -138,7 +139,14 @@ class HiluxDS8App extends Homey.App {
       // or a verify rescue — the evidence for "that was slow" reports
       if (path === '/hilux-diag') {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end(this._renderDiag(new URL(req.url, 'http://localhost').searchParams.get('all') === '1'));
+        const q = new URL(req.url, 'http://localhost').searchParams;
+        if (q.get('req') === '1') {
+          const fmt = (ms) => new Date(ms).toLocaleTimeString('en-GB', { timeZone: this.homey.clock.getTimezone() });
+          res.end((this._reqLog || []).slice().reverse()
+            .map((r) => `${fmt(r.t)}  ${r.ip.padEnd(15)} ${r.line}   [${r.ua}]`).join('\n') + '\n');
+          return;
+        }
+        res.end(this._renderDiag(q.get('all') === '1'));
         return;
       }
       // Motion webhook from a wall display — remembered so the panel page's
@@ -180,7 +188,30 @@ class HiluxDS8App extends Homey.App {
       }
       if (path === '/api/config') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end('{"version":"2026.1.0","location_name":"Homey","state":"RUNNING"}');
+        res.end(JSON.stringify(this._haConfig()));
+        return;
+      }
+      // The full Home Assistant Android app (Wall Display X2) registers
+      // itself as a mobile_app device after login and then talks through
+      // its webhook; it only opens the dashboard once both succeed.
+      if (path === '/api/mobile_app/registrations' && req.method === 'POST') {
+        res.writeHead(201, { 'Content-Type': 'application/json' });
+        res.end('{"cloudhook_url":null,"remote_ui_url":null,"secret":null,"webhook_id":"hilux"}');
+        return;
+      }
+      if (path.startsWith('/api/webhook/') && req.method === 'POST') {
+        let body = '';
+        req.on('data', (c) => { body += c; if (body.length > 65536) req.destroy(); });
+        req.on('end', () => {
+          let type = '';
+          try { type = (JSON.parse(body || '{}').type) || ''; } catch (e) { /* ignore */ }
+          let reply = {};
+          if (type === 'get_config') reply = this._haConfig();
+          else if (type === 'get_zones') reply = [];
+          else if (type === 'update_sensor_states') reply = {};
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(reply));
+        });
         return;
       }
       if (path === '/api/discovery_info') {
@@ -259,6 +290,7 @@ class HiluxDS8App extends Homey.App {
     const WebSocket = require('ws');
     this._wss = new WebSocket.Server({ noServer: true });
     this._pushServer.on('upgrade', (req, socket, head) => {
+      this._logRequest(req, `${(req.url || '').split('?')[0]} [websocket upgrade]`);
       const wsPath = (req.url || '').split('?')[0];
       this.log(`WS upgrade request: ${wsPath} from ${(req.socket.remoteAddress || '').replace(/^::ffff:/, '')}`);
       if (wsPath !== '/api/websocket') { socket.destroy(); return; }
@@ -578,6 +610,17 @@ class HiluxDS8App extends Homey.App {
   // /panel/<id> serves the page, /panel/<id>/state|set are its JSON API.
   // Commands reuse the group's own capability path, so they behave exactly
   // like taps on the Homey group tile.
+  // What the HA apps ask for in /api/config and the get_config webhook
+  _haConfig() {
+    return {
+      version: '2026.1.0', location_name: 'Homey', state: 'RUNNING',
+      unit_system: { length: 'km', mass: 'g', temperature: '°C', volume: 'L' },
+      time_zone: this.homey.clock.getTimezone(),
+      components: ['mobile_app', 'frontend', 'http', 'websocket_api'],
+      latitude: 0, longitude: 0, elevation: 0, external_url: null, internal_url: 'http://192.168.0.10:4820',
+    };
+  }
+
   _panelState(dev) {
     const t = dev.getCapabilityValue('light_temperature');
     return {
@@ -929,6 +972,19 @@ class HiluxDS8App extends Homey.App {
       }));
       pending = results.filter(Boolean);
     }
+  }
+
+  // Last requests from wall displays / browsers (pushes, relay calls and
+  // dashboard polling excluded) — shown on /hilux-diag?req=1 to debug
+  // display connection problems
+  _logRequest(req, path) {
+    if (/^\/(hilux-push|hilux-cmd|hilux-diag)\b/.test(path) || /\/(state|presence|weather|version)$/.test(path)) return;
+    if (!this._reqLog) this._reqLog = [];
+    this._reqLog.push({
+      t: Date.now(), ip: (req.socket.remoteAddress || '').replace(/^::ffff:/, ''),
+      line: `${req.method} ${req.url}`.slice(0, 200), ua: String(req.headers['user-agent'] || '').slice(0, 90),
+    });
+    if (this._reqLog.length > 100) this._reqLog.shift();
   }
 
   _recordDiag(entry) {
