@@ -115,5 +115,8 @@
   },
   "2.17.4": {
     "en": "Wall Display X2: dashboards report themselves connected to the Home Assistant app, ending the connection-error reloads."
+  },
+  "2.18.0": {
+    "en": "Wall dashboard: master tile dims and recolours all rooms that are on (tap = all off); swipe left/right on any tile changes its colour."
   }
 }
