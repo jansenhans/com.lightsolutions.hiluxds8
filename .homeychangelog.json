@@ -91,5 +91,8 @@
   },
   "2.15.4": {
     "en": "HomeKit hiding only touches devices where the HomeKit experiment is active (preparing for the switch to Matter Bridge)."
+  },
+  "2.15.5": {
+    "en": "Automatic firmware updates set by the Shelly app are switched off on lights and buttons; updates stay staged."
   }
 }

@@ -99,6 +99,7 @@ class HiluxDS8Device extends Homey.Device {
     }
 
     await this._ensureWebhooks();
+    if (this.homey.app.disableAutoUpdate) await this.homey.app.disableAutoUpdate(this.address);
   }
 
   // Keep cct.on/cct.off webhooks on the light pointing at the app's push

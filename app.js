@@ -667,6 +667,35 @@ class HiluxDS8App extends Homey.App {
     }
   }
 
+  // Fleet policy: firmware updates are staged by hand (Testroom first). The
+  // Shelly app's "automatic update" option installs an on-device schedule
+  // (daily Shelly.Update, origin shelly_service) that runs without cloud —
+  // found on 18 devices 2026-10-02. Disable any such job; keep it, so it can
+  // be re-enabled deliberately. Notifies once per device per app run.
+  async disableAutoUpdate(ip) {
+    const rpc = async (method, params) => {
+      const r = await fetch(`http://${ip}/rpc/${method}`, {
+        method: 'POST', body: JSON.stringify(params || {}), signal: AbortSignal.timeout(4000),
+      });
+      if (!r.ok) throw new Error(`${method} HTTP ${r.status}`);
+      return r.json();
+    };
+    const { jobs = [] } = await rpc('Schedule.List');
+    for (const job of jobs) {
+      const updates = (job.calls || []).some((c) => c.method === 'Shelly.Update');
+      if (!job.enable || !updates) continue;
+      await rpc('Schedule.Update', { id: job.id, enable: false });
+      this.log(`Automatic firmware update disabled on ${ip} (schedule ${job.id})`);
+      if (!this._autoUpdateNotified) this._autoUpdateNotified = new Set();
+      if (!this._autoUpdateNotified.has(ip)) {
+        this._autoUpdateNotified.add(ip);
+        await this.homey.notifications.createNotification({
+          excerpt: `HiluX: switched off automatic firmware updates on ${ip} (set by the Shelly app). Updates stay staged: Testroom first.`,
+        }).catch(() => {});
+      }
+    }
+  }
+
   // One RPC to a light: over its live connection when it has one (no TCP
   // setup), otherwise — or if the socket call fails — plain HTTP.
   async lightCall(ip, method, params, timeoutMs, liveMap = null) {
@@ -980,6 +1009,7 @@ class HiluxDS8App extends Homey.App {
         }
         this._deployedHashes.set(address, hash);
         if (result.changed) this.log(`Rebuild (${reason}): i4 ${address} updated`);
+        if (force) await this.disableAutoUpdate(address).catch((e) => this.error(`Auto-update check on ${address} failed:`, e.message));
 
         // Recovered after a notified outage? Close the loop.
         if (this._failureNotifiedAt.has(address)) {
