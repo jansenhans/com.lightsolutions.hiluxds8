@@ -94,5 +94,8 @@
   },
   "2.15.5": {
     "en": "Automatic firmware updates set by the Shelly app are switched off on lights and buttons; updates stay staged."
+  },
+  "2.15.6": {
+    "en": "Wall Display panel no longer creates duplicate controls when the display is slow to answer."
   }
 }
