@@ -127,5 +127,8 @@
   },
   "2.18.3": {
     "en": "Multi-room dashboard wakes only on its own display's motion."
+  },
+  "2.18.4": {
+    "en": "Wall dashboards: bolder clocks."
   }
 }
