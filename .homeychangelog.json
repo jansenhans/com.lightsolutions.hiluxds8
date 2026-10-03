@@ -130,5 +130,8 @@
   },
   "2.18.4": {
     "en": "Wall dashboards: bolder clocks."
+  },
+  "2.18.5": {
+    "en": "Wall dashboards: back to the thin clock font."
   }
 }
