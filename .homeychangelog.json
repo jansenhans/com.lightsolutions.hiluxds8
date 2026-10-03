@@ -133,5 +133,8 @@
   },
   "2.18.5": {
     "en": "Wall dashboards: back to the thin clock font."
+  },
+  "2.18.6": {
+    "en": "A screen's page choice is also kept in a cookie, so it survives IP address changes."
   }
 }

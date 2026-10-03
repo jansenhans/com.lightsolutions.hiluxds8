@@ -259,8 +259,11 @@ class HiluxDS8App extends Homey.App {
         // Prefer the group whose panel_address matches the caller; fall back
         // to the only panel-carrying group (the display's WebView traffic can
         // originate from a different IP than its Shelly service)
-        // A screen's own choice (made on the /panel picker) wins
-        const choice = (this.homey.settings.get('panel_choices') || {})[ip];
+        // A screen's own choice (made on the /panel picker) wins: its cookie
+        // first (survives IP changes), else the choice stored for its IP
+        const cookie = /(?:^|;\s*)hilux_panel=([^;]+)/.exec(req.headers.cookie || '');
+        const choice = (cookie && decodeURIComponent(cookie[1]))
+          || (this.homey.settings.get('panel_choices') || {})[ip];
         if (choice && choice.startsWith('area:')) {
           const area = this._panelAreas(groups).find((a) => a.id === choice.slice(5));
           if (area) {
@@ -684,7 +687,12 @@ class HiluxDS8App extends Homey.App {
       else delete choices[caller];
       this.homey.settings.set('panel_choices', choices);
       this.log(`Panel choice for ${caller}: ${target || '(cleared)'}`);
-      res.writeHead(302, { Location: '/' });
+      // Also as a cookie: it stays with the screen when its IP changes
+      const valid = /^(area|group):[\w-]+$/.test(target);
+      res.writeHead(302, {
+        Location: '/',
+        'Set-Cookie': `hilux_panel=${valid ? encodeURIComponent(target) : ''}; Path=/; Max-Age=${valid ? 315360000 : 0}; SameSite=Lax`,
+      });
       res.end();
       return;
     }
