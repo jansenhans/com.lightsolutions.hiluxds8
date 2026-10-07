@@ -51,7 +51,10 @@ class HiluxDS8Device extends Homey.Device {
     }
 
     this.client = new ShellyRpcClient(this.address);
-    this._syncLive(settings);
+    await this._migrateLive().catch(this.error);
+    // Stagger: at app start every light initializes at once — don't open
+    // ~80 sockets in the same second
+    this.homey.setTimeout(() => this._syncLive(), Math.floor(Math.random() * 15000));
     await this._startPolling();
 
     // A light appearing (or reappearing) can change a button cluster
@@ -139,7 +142,19 @@ class HiluxDS8Device extends Homey.Device {
     }, POLL_INTERVAL_MS);
   }
 
-  // --- live connection (setting "live_connection", beta) --------------------
+  // --- live connection (setting "live_connection") --------------------------
+
+  // One-time fleet rollout (2026-10-07, after 8 days clean on the Testroom):
+  // switch the live connection on for every light once. A light switched
+  // off afterwards stays off — the store flag keeps this from re-running.
+  async _migrateLive() {
+    if (this.getStoreValue('live_rollout_v1')) return;
+    if (this.getSetting('live_connection') !== true) {
+      await this.setSettings({ live_connection: true });
+      this.log('Live connection switched on (fleet rollout)');
+    }
+    await this.setStoreValue('live_rollout_v1', true);
+  }
 
   // Start, restart (address change) or stop the persistent WebSocket to the
   // light to match the settings. Settings are passed in because inside

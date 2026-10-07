@@ -136,5 +136,8 @@
   },
   "2.18.6": {
     "en": "A screen's page choice is also kept in a cookie, so it survives IP address changes."
+  },
+  "2.19.0": {
+    "en": "Live connection rolled out to every light (on by default, can still be switched off per light)."
   }
 }
