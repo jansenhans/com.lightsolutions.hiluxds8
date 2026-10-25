@@ -1043,7 +1043,7 @@ class HiluxDS8App extends Homey.App {
     const order = sortAddresses(live.map(([ip]) => ip));
     live.sort((x, y) => order.indexOf(x[0]) - order.indexOf(y[0]));
     for (const [ip, dev, st] of live) {
-      lines.push(`    ${ip.padEnd(15)} ${st.connected ? 'UP  ' : 'DOWN'}  connects ${st.connects}  drops ${st.drops}`
+      lines.push(`    ${ip.padEnd(15)} ${st.connected ? 'UP  ' : 'DOWN'}  connects ${st.connects}  drops ${st.drops}  missed pings ${st.misses || 0}`
         + `${st.since ? `  up since ${fmt(st.since)}` : ''}  ${dev.getName()}`);
       if (st.lastDrop) lines.push(`                    last drop ${fmt(st.lastDrop.at)}: ${st.lastDrop.reason}`);
     }

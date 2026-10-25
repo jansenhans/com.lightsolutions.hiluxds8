@@ -139,5 +139,8 @@
   },
   "2.19.0": {
     "en": "Live connection rolled out to every light (on by default, can still be switched off per light)."
+  },
+  "2.19.1": {
+    "en": "Live connection: one missed keepalive is retried before the connection is dropped (fewer drops on weak Wi-Fi)."
   }
 }
