@@ -24,6 +24,23 @@
 
   <button id="save" class="homey-button-primary-full">Save</button>
 
+  <fieldset class="homey-form-fieldset">
+    <legend class="homey-form-legend">Presence simulation</legend>
+    <div class="homey-form-group">
+      <label class="homey-form-checkbox">
+        <input class="homey-form-checkbox-input" id="presence" type="checkbox" />
+        <span class="homey-form-checkbox-checkmark"></span>
+        <span class="homey-form-checkbox-text">Simulate that someone is home</span>
+      </label>
+      <p class="homey-form-help">
+        Rooms follow a daily routine based on their type, sunset and the
+        weekday &mdash; different every day. Also available as Flow cards.
+        Leave a room out via its group's settings.
+      </p>
+    </div>
+    <div id="plan" class="homey-form-help"></div>
+  </fieldset>
+
   <script>
     function onHomeyReady(Homey) {
       var el = document.getElementById('api_key');
@@ -36,6 +53,25 @@
           Homey.alert('Saved. Lights will be renamed within a few seconds.');
         });
       });
+      var presence = document.getElementById('presence');
+      function showPlan() {
+        Homey.get('presence_enabled', function (err, on) { presence.checked = !!on; });
+        Homey.get('presence_plan', function (err, plan) {
+          var el = document.getElementById('plan');
+          if (!plan || !plan.events) { el.textContent = ''; return; }
+          el.innerHTML = '<p><strong>Plan for ' + plan.day + '</strong></p>' + plan.events.map(function (e) {
+            return e.time + ' &nbsp; ' + e.room.replace(/</g, '&lt;') + ' ' + e.action;
+          }).join('<br>');
+        });
+      }
+      presence.addEventListener('change', function () {
+        Homey.set('presence_enabled', presence.checked, function (err) {
+          if (err) return Homey.alert(err);
+          setTimeout(showPlan, 1500);
+        });
+      });
+      Homey.on('settings.set', showPlan);
+      showPlan();
       Homey.ready();
     }
   </script>

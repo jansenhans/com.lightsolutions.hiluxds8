@@ -136,6 +136,17 @@ class HiluxGroupDevice extends Homey.Device {
     await this._broadcast(params);
   }
 
+  // Presence simulation: switch the room exactly as its tile would, so the
+  // group's own fade and minimum brightness apply
+  async applyPresence({ on, brightness, ct }) {
+    if (!on) return this._onCapabilities({ onoff: false });
+    return this._onCapabilities({
+      onoff: true,
+      dim: brightness / 100,
+      light_temperature: (CT_MAX - ct) / (CT_MAX - CT_MIN),
+    });
+  }
+
   _minBrightness() {
     const raw = this.getSetting('min_brightness');
     return typeof raw === 'number' ? raw : DEFAULT_MIN_BRIGHTNESS;

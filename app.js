@@ -9,6 +9,7 @@ const Deployer = require('./lib/I4Deployer');
 const PanelDeployer = require('./lib/PanelDeployer');
 const PanelPage = require('./lib/PanelPage');
 const MdnsResponder = require('./lib/MdnsResponder');
+const PresenceSimulator = require('./lib/PresenceSimulator');
 
 const REBUILD_DEBOUNCE_MS = 3000;
 const REBUILD_INTERVAL_MS = 5 * 60 * 1000; // catch zone moves and drift
@@ -85,7 +86,16 @@ class HiluxDS8App extends Homey.App {
         this._renameKeyWarned = false;
         this.scheduleRebuild('api key updated');
       }
+      if (key === 'presence_enabled' && this._presence) this._presence.sync();
     });
+
+    // Presence simulation: Flow cards and the settings page toggle both act
+    // on the stored flag; resumes after a restart once the groups are up
+    this._presence = new PresenceSimulator(this);
+    this.homey.flow.getActionCard('presence_start').registerRunListener(() => this._presence.start());
+    this.homey.flow.getActionCard('presence_stop').registerRunListener(() => this._presence.stop());
+    this.homey.flow.getConditionCard('presence_running').registerRunListener(() => this._presence.running);
+    this.homey.setTimeout(() => this._presence.init(), 20000);
     this._deployedHashes = new Map(); // i4 address -> last deployed config hash
     this._deployFailures = new Map(); // i4 address -> consecutive failure count
     this._failureNotifiedAt = new Map(); // i4 address -> last notification ts

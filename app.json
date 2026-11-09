@@ -1,6 +1,6 @@
 {
   "id": "com.lightsolutions.hiluxds8",
-  "version": "2.19.1",
+  "version": "2.20.0",
   "compatibility": ">=5.0.0",
   "sdk": 3,
   "platforms": [
@@ -216,6 +216,32 @@
             "filter": "driver_id=hilux-group"
           }
         ]
+      },
+      {
+        "id": "presence_start",
+        "title": {
+          "en": "Start presence simulation"
+        },
+        "hint": {
+          "en": "Lights the house as if someone is home: an evening routine through the rooms based on sunset, weekday and room type, different every day. Keeps running (also after a restart) until stopped."
+        }
+      },
+      {
+        "id": "presence_stop",
+        "title": {
+          "en": "Stop presence simulation"
+        },
+        "hint": {
+          "en": "Stops the simulation and switches off the rooms it had switched on."
+        }
+      }
+    ],
+    "conditions": [
+      {
+        "id": "presence_running",
+        "title": {
+          "en": "Presence simulation !{{is|is not}} running"
+        }
       }
     ]
   },
@@ -574,6 +600,17 @@
             "en": "IP address of a Shelly Wall Display that should control this group — several displays can be listed, separated by commas. The app deploys and maintains a touch panel (toggle + brightness + colour sliders) on each automatically, following the group's lights. Leave empty for no panel."
           },
           "value": ""
+        },
+        {
+          "id": "presence_include",
+          "type": "checkbox",
+          "label": {
+            "en": "Use in presence simulation"
+          },
+          "hint": {
+            "en": "While presence simulation runs, this room follows a believable daily routine based on its name (living, kitchen, dining, hall, bathroom, bedroom, pantry). Groups with other names are never used."
+          },
+          "value": true
         }
       ],
       "capabilitiesOptions": {

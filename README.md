@@ -75,6 +75,26 @@ across floors.
   sweeps in sync. The tile mirrors the group's reference light (lowest IP)
   for display.
 
+**Presence simulation** (since v2.20.0): makes the house look lived-in
+while you're away. Start/stop with the Flow cards *Start / Stop presence
+simulation* (condition: *Presence simulation is running*) or the toggle in
+the app settings, which also shows today's plan.
+
+- Uses the light groups as rooms. The room type comes from the group/zone
+  name (living, kitchen, dining, hall, bathroom, bedroom, pantry); other
+  groups (e.g. "All lights") are never used, and any group can opt out via
+  its *Use in presence simulation* setting.
+- Instead of random flicker, each day (05:00 → 05:00) gets a fresh routine:
+  a dark-morning wake-up (bedroom → bathroom → kitchen), the living room
+  coming on around sunset (not every part every day, dimmed later for TV),
+  dinner in kitchen and dining room, short trips to hall, bathroom, kitchen
+  and pantry, kids' rooms in the evening, a staggered bedtime
+  (hall → bathroom → dressing → bedroom, later on Fri/Sat, now and then an
+  early night) and sometimes a dim night-time bathroom visit.
+- Lights only come on while it is dark (sunrise/sunset from Homey's
+  location), with each group's own fade time. It survives app restarts,
+  and stopping switches off only the rooms the simulation switched on.
+
 ## Requirements
 
 - Homey Pro; the app uses the `homey:manager:api` permission (it reads
@@ -117,6 +137,7 @@ app.js                            Orchestrator: zones -> per-i4 script deploys
 lib/ShellyRpcClient.js            Local Shelly Gen3 RPC client
 lib/I4ScriptBuilder.js            Generates the per-i4 button script (mJS)
 lib/I4Deployer.js                 Deploys scripts over RPC (hash-idempotent)
+lib/PresenceSimulator.js          Daily presence routine over the room groups
 drivers/hilux-ds8/                Light driver: discovery pairing, polling,
                                   capability listeners, settings enforcement
 drivers/hilux-i4-button/          Wall button driver: one device per i4 input
