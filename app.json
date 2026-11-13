@@ -1,6 +1,6 @@
 {
   "id": "com.lightsolutions.hiluxds8",
-  "version": "2.20.0",
+  "version": "2.21.0",
   "compatibility": ">=5.0.0",
   "sdk": 3,
   "platforms": [
@@ -624,6 +624,39 @@
           }
         }
       }
+    },
+    {
+      "id": "hilux-presence",
+      "name": {
+        "en": "Presence simulation"
+      },
+      "class": "socket",
+      "capabilities": [
+        "onoff"
+      ],
+      "platforms": [
+        "local"
+      ],
+      "connectivity": [
+        "lan"
+      ],
+      "images": {
+        "small": "/drivers/hilux-presence/assets/images/small.png",
+        "large": "/drivers/hilux-presence/assets/images/large.png"
+      },
+      "pair": [
+        {
+          "id": "list_devices",
+          "template": "list_devices",
+          "navigation": {
+            "next": "add_devices"
+          }
+        },
+        {
+          "id": "add_devices",
+          "template": "add_devices"
+        }
+      ]
     }
   ],
   "capabilities": {

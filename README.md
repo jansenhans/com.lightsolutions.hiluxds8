@@ -94,6 +94,10 @@ the app settings, which also shows today's plan.
 - Lights only come on while it is dark (sunrise/sunset from Homey's
   location), with each group's own fade time. It survives app restarts,
   and stopping switches off only the rooms the simulation switched on.
+- **Presence simulation switch** (since v2.21.0): an optional on/off device
+  (Add device → HiluX DS8 → Presence simulation) that mirrors the simulation
+  both ways. Share it through Homey's Matter Bridge to start and stop the
+  simulation from Apple Home, Siri or Apple's own automations.
 
 ## Requirements
 
@@ -143,6 +147,7 @@ drivers/hilux-ds8/                Light driver: discovery pairing, polling,
 drivers/hilux-i4-button/          Wall button driver: one device per i4 input
 drivers/hilux-group/              Virtual light group: zone-set membership,
                                   broadcast-once fan-out, reference mirror
+drivers/hilux-presence/           Presence simulation on/off switch
 extras/shelly-i4-hold-to-dim.js   LEGACY standalone script (see below)
 ```
 
