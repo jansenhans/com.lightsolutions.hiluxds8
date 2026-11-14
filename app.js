@@ -87,6 +87,9 @@ class HiluxDS8App extends Homey.App {
         this.scheduleRebuild('api key updated');
       }
       if (key === 'presence_enabled' && this._presence) this._presence.sync();
+      if (key === 'ap_names') {
+        for (const dev of this._lightDevicesByAddress().values()) dev.refreshAccessPointName().catch(() => {});
+      }
     });
 
     // Presence simulation: Flow cards and the settings page toggle both act
@@ -875,6 +878,25 @@ class HiluxDS8App extends Homey.App {
     const r = await fetch(`http://${ip}/rpc/${method}?${qs}`, { signal: AbortSignal.timeout(timeoutMs) });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return { result: await r.json(), via: 'http' };
+  }
+
+  // Access points seen by the lights: BSSID -> light count, kept in the
+  // settings so the settings page can offer a name field for each
+  noteAccessPoint(address, bssid) {
+    if (!this._apByLight) this._apByLight = new Map();
+    if (this._apByLight.get(address) === bssid) return;
+    this._apByLight.set(address, bssid);
+    if (this._apSaveTimer) this.homey.clearTimeout(this._apSaveTimer);
+    this._apSaveTimer = this.homey.setTimeout(() => {
+      const seen = {};
+      for (const b of this._apByLight.values()) seen[b] = (seen[b] || 0) + 1;
+      this.homey.settings.set('ap_seen', seen);
+    }, 5000);
+  }
+
+  accessPointName(bssid) {
+    const names = this.homey.settings.get('ap_names') || {};
+    return names[bssid] || `Access point …${bssid.slice(-5)}`;
   }
 
   _lightDevicesByAddress() {

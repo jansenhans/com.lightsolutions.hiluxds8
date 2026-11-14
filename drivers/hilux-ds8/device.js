@@ -18,6 +18,9 @@ const LIVE_CALL_TIMEOUT_MS = 2000;
 // manifest defaults into existing devices' settings stores)
 const DEFAULT_TRANSITION_S = 1;
 const DEFAULT_MIN_ON_TOGGLE = 5;
+// Wi-Fi signal + which access point (by BSSID) the light is on — the Orbi
+// admin page misattributes 2.4 GHz IoT clients, the light itself doesn't
+const WIFI_CHECK_MS = 5 * 60 * 1000;
 
 function ctToHomeyTemperature(ct) {
   const clamped = Math.min(CT_MAX, Math.max(CT_MIN, ct));
@@ -56,6 +59,12 @@ class HiluxDS8Device extends Homey.Device {
     // ~80 sockets in the same second
     this.homey.setTimeout(() => this._syncLive(), Math.floor(Math.random() * 15000));
     await this._startPolling();
+
+    for (const cap of ['measure_wifi_signal', 'wifi_access_point']) {
+      if (!this.hasCapability(cap)) await this.addCapability(cap).catch(this.error);
+    }
+    this.homey.setTimeout(() => this.checkWifi(), 30000 + Math.floor(Math.random() * 60000));
+    this._wifiInterval = this.homey.setInterval(() => this.checkWifi(), WIFI_CHECK_MS);
 
     // A light appearing (or reappearing) can change a button cluster
     if (this.homey.app.scheduleRebuild) this.homey.app.scheduleRebuild('light init');
@@ -205,13 +214,39 @@ class HiluxDS8Device extends Homey.Device {
     }
   }
 
+  async checkWifi() {
+    if (!this.client) return;
+    try {
+      const st = this.isLive()
+        ? await this.liveCall('Wifi.GetStatus', {}).catch(() => this.client.call('Wifi.GetStatus'))
+        : await this.client.call('Wifi.GetStatus');
+      if (typeof st.rssi === 'number') await this.setCapabilityValue('measure_wifi_signal', st.rssi).catch(this.error);
+      if (st.bssid) {
+        this._bssid = st.bssid;
+        this.homey.app.noteAccessPoint(this.address, st.bssid);
+        await this.refreshAccessPointName();
+      }
+    } catch (err) { /* unreachable now — the poll handles availability */ }
+  }
+
+  // Called again when access point names change in the app settings
+  async refreshAccessPointName() {
+    if (!this._bssid) return;
+    const name = this.homey.app.accessPointName(this._bssid);
+    if (this.getCapabilityValue('wifi_access_point') !== name) {
+      await this.setCapabilityValue('wifi_access_point', name).catch(this.error);
+    }
+  }
+
   async onUninit() {
+    if (this._wifiInterval) this.homey.clearInterval(this._wifiInterval);
     if (this._pollInterval) this.homey.clearInterval(this._pollInterval);
     if (this._enforceInterval) this.homey.clearInterval(this._enforceInterval);
     this._stopLive();
   }
 
   async onDeleted() {
+    if (this._wifiInterval) this.homey.clearInterval(this._wifiInterval);
     if (this._pollInterval) this.homey.clearInterval(this._pollInterval);
     if (this._enforceInterval) this.homey.clearInterval(this._enforceInterval);
     this._stopLive();

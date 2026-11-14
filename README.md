@@ -14,6 +14,12 @@ without any cloud or hub round-trip.
 - Pairing by automatic network discovery: scans the /23 around Homey's own
   address and finds devices reporting `app: "XMOD1"`
 - Polls every 15 seconds to stay in sync with changes made elsewhere
+- **Wi-Fi signal and access point** (since v2.22.0): every light shows its
+  RSSI (with Insights history) and which access point it is connected to,
+  checked every 5 minutes. Name the access points in the app settings
+  ("Orbi router", "Satellite hall"…). Unlike the Orbi admin page, which
+  files most 2.4 GHz IoT clients under the router, this comes from the
+  light itself.
 - **Enforced settings**: each light's *default fade time* and *minimum
   turn-on brightness* are device settings in Homey; the app re-applies them
   if they drift — notably after firmware updates, which reset them

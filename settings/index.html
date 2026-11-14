@@ -41,6 +41,17 @@
     <div id="plan" class="homey-form-help"></div>
   </fieldset>
 
+  <fieldset class="homey-form-fieldset">
+    <legend class="homey-form-legend">Wi-Fi access points</legend>
+    <p class="homey-form-help">
+      Each light reports which access point it is connected to. Give them a
+      name (e.g. "Orbi router", "Satellite hall") and every light shows it
+      instead of the address.
+    </p>
+    <div id="aps"></div>
+    <button id="save_aps" class="homey-button-secondary-full">Save names</button>
+  </fieldset>
+
   <script>
     function onHomeyReady(Homey) {
       var el = document.getElementById('api_key');
@@ -71,6 +82,32 @@
         });
       });
       Homey.on('settings.set', showPlan);
+
+      var apBox = document.getElementById('aps');
+      Homey.get('ap_seen', function (err, seen) {
+        Homey.get('ap_names', function (err2, names) {
+          names = names || {};
+          var keys = Object.keys(seen || {}).sort();
+          if (!keys.length) { apBox.innerHTML = '<p class="homey-form-help">No access points seen yet.</p>'; return; }
+          apBox.innerHTML = keys.map(function (b) {
+            return '<div class="homey-form-group"><label class="homey-form-label">' + b + ' (' + seen[b] + ' lights)</label>'
+              + '<input class="homey-form-input ap-name" data-bssid="' + b + '" type="text" /></div>';
+          }).join('');
+          Array.prototype.forEach.call(apBox.querySelectorAll('.ap-name'), function (el) {
+            el.value = names[el.getAttribute('data-bssid')] || '';
+          });
+        });
+      });
+      document.getElementById('save_aps').addEventListener('click', function () {
+        var names = {};
+        Array.prototype.forEach.call(apBox.querySelectorAll('.ap-name'), function (el) {
+          if (el.value.trim()) names[el.getAttribute('data-bssid')] = el.value.trim();
+        });
+        Homey.set('ap_names', names, function (err) {
+          if (err) return Homey.alert(err);
+          Homey.alert('Saved. The lights show the new names right away.');
+        });
+      });
       showPlan();
       Homey.ready();
     }

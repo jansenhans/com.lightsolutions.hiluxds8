@@ -1,6 +1,6 @@
 {
   "id": "com.lightsolutions.hiluxds8",
-  "version": "2.21.0",
+  "version": "2.22.0",
   "compatibility": ">=5.0.0",
   "sdk": 3,
   "platforms": [
@@ -676,6 +676,32 @@
       "decimals": 0,
       "min": 0,
       "step": 1
+    },
+    "measure_wifi_signal": {
+      "type": "number",
+      "title": {
+        "en": "Wi-Fi signal"
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": "sensor",
+      "icon": "/assets/icon.svg",
+      "insights": true,
+      "units": {
+        "en": "dBm"
+      },
+      "decimals": 0
+    },
+    "wifi_access_point": {
+      "type": "string",
+      "title": {
+        "en": "Access point"
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": "sensor",
+      "icon": "/assets/icon.svg",
+      "insights": false
     }
   }
 }
